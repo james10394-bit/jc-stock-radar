@@ -1,0 +1,41 @@
+name: Update TWSE data
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '25 10 * * 1-5'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: twse-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch official market data
+        run: python3 scripts/update.py
+
+      - name: Commit changed snapshot
+        run: |
+          if git diff --quiet -- data/market.json; then
+            echo "No changed market session."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/market.json
+          git commit -m "data: update TWSE analysis snapshot"
+          git push
