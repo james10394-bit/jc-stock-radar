@@ -1,10 +1,12 @@
-# 台股法人技術分析站 · v2.0.0
+# 台股法人技術分析站 · v2.0.1
 
-這是一套可部署到 GitHub Pages 的台股盤後研究工具，整合臺灣證券交易所上市股票的三大法人資料、外資排行、本益比，以及自選股的 KD、布林通道、均線、支撐壓力與規則式操作區間。
+這是一套可部署到 GitHub Pages 的台股盤後研究工具，整合臺灣證券交易所上市股票的三大法人資料、外資排行、本益比，以及全上市市場的 KD、布林通道、均線、支撐壓力與規則式操作區間。
 
-## v2.0.0 新增內容
+## v2.0.1 新增內容
 
-- 自選股近 7 個月份日線，自動保留最近 160 個交易日。
+- 五個自選分類頁，每頁最多 10 支股票，分類名稱、副標題與股票都由 GitHub 檔案管理。
+- 所有主要分析欄位都有醒目的大標題，手機與電腦版皆可快速切換。
+- 每個交易日以一個 MI_INDEX 請求取得全上市市場日線，自動保留最近 80 個交易日。
 - KD（9,3,3）、MA5／MA10／MA20、布林通道（20日、2倍標準差）。
 - 前 20 日高低點支撐與壓力。
 - 分批買進觀察區、停損參考、分批賣出觀察區。
@@ -18,7 +20,7 @@
 
 1. 解壓縮 ZIP，把資料夾裡所有檔案上傳到 GitHub 儲存庫根目錄，包含隱藏的 `.github/workflows/update.yml`。
 2. 到 **Settings → Actions → General → Workflow permissions**，選擇 **Read and write permissions** 並儲存。
-3. 到 **Actions → Update TWSE data → Run workflow**，先手動執行一次。第一次會補齊約 20～30 個法人交易日與自選股歷史日線，時間會比日常更新久。
+3. 到 **Actions → Update TWSE data → Run workflow**，先手動執行一次。第一次會補齊約 20～30 個法人交易日與全市場歷史日線，時間會比日常更新久。
 4. 到 **Settings → Pages → Build and deployment**，選 **Deploy from a branch**、`main`、`/(root)`。
 5. 網站通常會出現在 `https://你的帳號.github.io/儲存庫名稱/`。
 
@@ -26,15 +28,19 @@
 
 ## 修改自選股票
 
-開啟 `data/watchlist.json`，把股票代號改成你要追蹤的上市股票：
+開啟 `data/watchlist.json`，可修改五頁的大標題、副標題與股票代號：
 
 ```json
 {
-  "codes": ["2330", "2317", "2454", "2603", "2609", "2615"]
+  "pages": [{
+    "title": "大型權值領航",
+    "subtitle": "觀察台股核心權值與大盤方向",
+    "codes": ["2330", "2317", "2454", "2308", "2382", "2412", "2881", "2882", "2891", "6505"]
+  }]
 }
 ```
 
-最多建議 30 檔。修改後到 Actions 手動執行一次，系統才會下載新加入股票的歷史日線。沒有加入自選清單的上市股票仍可查詢法人資料，但不會顯示完整 KD、布林與操作區間。
+每頁最多 10 支，預設 5 頁。修改後到 Actions 手動執行一次，即會把新清單同步到網站。技術行情採全市場統一累積，因此沒有加入自選頁的上市股票也可透過搜尋查看完整技術分析。
 
 ## 計算方式
 
@@ -56,7 +62,7 @@
 
 - [三大法人買賣超日報](https://www.twse.com.tw/zh/trading/foreign/t86.html)
 - [個股日本益比](https://www.twse.com.tw/zh/trading/historical/bwibbu-day.html)
-- [個股日成交資訊](https://www.twse.com.tw/zh/trading/historical/stock-day.html)
+- [每日收盤行情 MI_INDEX](https://www.twse.com.tw/zh/trading/historical/mi-index.html)
 - [TWSE OpenAPI](https://openapi.twse.com.tw/)
 
 ## 本地檢查

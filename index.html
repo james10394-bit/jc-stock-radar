@@ -11,7 +11,7 @@
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE FLOW · v2.0.0 技術分析版</small></div></div>
+  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE FLOW · v2.0.1 五頁自選版</small></div></div>
   <a href="https://www.twse.com.tw/" target="_blank" rel="noopener">官方資料：臺灣證券交易所 ↗</a>
 </header>
 <main>
@@ -24,11 +24,17 @@
     <label>法人統計期間<select id="period"><option value="5">最近5日</option><option value="10">最近10日</option><option value="20" selected>最近20日</option></select></label>
     <button id="refresh">重新讀取</button>
   </div>
-  <div class="watchbar"><span>自選技術分析</span><div id="watchlist" class="watchlist"></div></div>
+  <section class="watchhub">
+    <div class="sectiontitle"><div class="eyebrow">五大自選分類</div><h2>我的股票觀察室</h2><p>每頁最多 10 支股票，頁名與內容由 GitHub 檔案統一管理。</p></div>
+    <div id="watchPages" class="watchpages"></div>
+    <div class="watchheading"><div><h3 id="watchTitle">我的自選股</h3><p id="watchSubtitle">讀取清單中…</p></div><span>點選股票立即分析</span></div>
+    <div id="watchlist" class="watchlist"></div>
+  </section>
   <div id="status" role="status"></div>
 
   <section class="grid" id="content" hidden>
     <div class="heading"><div><div class="eyebrow">個股完整診斷</div><h2 id="title">—</h2></div><span id="dateBadge" class="pill"></span></div>
+    <div class="sectiontitle blocktitle"><div class="eyebrow">法人核心數字</div><h2>法人籌碼總覽</h2></div>
     <div class="metrics five">
       <article class="card accent"><span>外資當日買賣超</span><strong id="foreignToday">—</strong><div id="foreignSub" class="sub"></div></article>
       <article class="card"><span>外資期間累計</span><strong id="foreignPeriod">—</strong><div id="foreignStreak" class="sub"></div></article>
@@ -37,7 +43,8 @@
       <article class="card"><span>收盤價 · 本益比</span><strong id="closePe">—</strong><div class="sub">同一最新交易日</div></article>
     </div>
 
-    <div class="columns planrow">
+    <div class="sectiontitle blocktitle"><div class="eyebrow">規則式策略</div><h2>策略判讀與操作區間</h2></div>
+    <div class="columns planrow nomargin">
       <article class="panel">
         <div class="panelhead"><div><h3>分析結論</h3><p>法人與技術面規則綜合評分</p></div></div>
         <div id="tradePlan" class="signal neutral"></div>
@@ -53,7 +60,8 @@
       </article>
     </div>
 
-    <div class="columns">
+    <div class="sectiontitle blocktitle"><div class="eyebrow">資金流向</div><h2>三大法人資金動向</h2></div>
+    <div class="columns nomargin">
       <article class="panel">
         <div class="panelhead"><div><h3>三大法人買賣明細</h3><p>最新交易日 · 單位：張</p></div></div>
         <div class="scroll"><table><thead><tr><th>法人</th><th>買進</th><th>賣出</th><th>買賣超</th></tr></thead><tbody id="details"></tbody></table></div>
@@ -63,7 +71,8 @@
       <article class="panel"><div class="panelhead"><div><h3>外資淨買賣走勢</h3><p>正數買超，負數賣超</p></div></div><div id="flowChart" class="chart"></div></article>
     </div>
 
-    <div class="columns techrow">
+    <div class="sectiontitle blocktitle"><div class="eyebrow">日線技術面</div><h2>技術指標與價格趨勢</h2></div>
+    <div class="columns techrow nomargin">
       <article class="panel wide"><div class="panelhead"><div><h3>價格、布林通道與支撐壓力</h3><p>藍線收盤價 · 紫線布林上下軌 · 黃線20日均線</p></div></div><div id="techChart" class="chart tech"></div></article>
       <article class="panel indicators">
         <h3>技術指標</h3>
@@ -74,7 +83,8 @@
       </article>
     </div>
 
-    <div class="panel full">
+    <div class="sectiontitle blocktitle"><div class="eyebrow">市場排行</div><h2>市場外資排行榜</h2></div>
+    <div class="panel full nomargin">
       <div class="panelhead"><div><h3>外資買賣超排行</h3><p>最新交易日 · 單位：張</p></div><div class="tabs"><button class="active" data-rank="buy">買超</button><button data-rank="sell">賣超</button></div></div>
       <div class="scroll"><table><thead><tr><th>名次</th><th>股票</th><th>外資買賣超</th><th>收盤價</th></tr></thead><tbody id="ranking"></tbody></table></div>
     </div>
