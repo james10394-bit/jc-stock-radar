@@ -17,7 +17,7 @@ TAIPEI = ZoneInfo('Asia/Taipei')
 T86 = 'https://www.twse.com.tw/rwd/zh/fund/T86'
 QUOTES = 'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL'
 PE = 'https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_d'
-STOCK_DAY = 'https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY'
+MI_INDEX = 'https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX'
 
 
 def number(value):
@@ -164,6 +164,36 @@ def price_rows(payload):
     return result
 
 
+def all_market_rows(payload, day):
+    """Return all listed OHLC rows from the dated MI_INDEX report."""
+    if not isinstance(payload, dict) or payload.get('stat') != 'OK':
+        return {}
+    for table in payload.get('tables') or []:
+        fields = table.get('fields') or []
+        required = {
+            'code': field_index(fields, include=('證券代號',)),
+            'volume': field_index(fields, include=('成交股數',)),
+            'open': field_index(fields, include=('開盤價',)),
+            'high': field_index(fields, include=('最高價',)),
+            'low': field_index(fields, include=('最低價',)),
+            'close': field_index(fields, include=('收盤價',)),
+        }
+        if any(v is None for v in required.values()):
+            continue
+        result = {}
+        for row in table.get('data') or []:
+            code = label(row[required['code']])
+            if not re.fullmatch(r'\d{4,6}', code):
+                continue
+            parsed = {'date': day}
+            parsed.update({key: number(row[idx]) for key, idx in required.items() if key != 'code'})
+            if all(parsed[x] is not None for x in ('open', 'high', 'low', 'close')):
+                result[code] = parsed
+        if result:
+            return result
+    raise ValueError('MI_INDEX all-stock OHLC table not found')
+
+
 def http_json(url, params=None):
     if params:
         url += '?' + urllib.parse.urlencode(params)
@@ -174,19 +204,23 @@ def http_json(url, params=None):
         return json.load(response)
 
 
-def month_starts(day, count=7):
-    months = []
-    cursor = day.replace(day=1)
-    for _ in range(count):
-        months.append(cursor)
-        cursor = (cursor - dt.timedelta(days=1)).replace(day=1)
-    return reversed(months)
-
-
 def load_watchlist():
-    raw = json.loads(WATCHLIST.read_text(encoding='utf-8')) if WATCHLIST.exists() else {'codes': ['2330', '2615']}
-    codes = [str(code).strip() for code in raw.get('codes', []) if re.fullmatch(r'\d{4,6}', str(code).strip())]
-    return list(dict.fromkeys(codes))[:30]
+    raw = json.loads(WATCHLIST.read_text(encoding='utf-8')) if WATCHLIST.exists() else {}
+    pages = raw.get('pages')
+    if not isinstance(pages, list):
+        pages = [{'title': '我的自選股', 'subtitle': '重點觀察清單', 'codes': raw.get('codes', ['2330', '2615'])}]
+    clean = []
+    for index, page in enumerate(pages[:10], 1):
+        if not isinstance(page, dict):
+            continue
+        codes = [str(code).strip() for code in page.get('codes', [])
+                 if re.fullmatch(r'\d{4,6}', str(code).strip())]
+        clean.append({
+            'title': str(page.get('title') or f'自選股第{index}頁')[:30],
+            'subtitle': str(page.get('subtitle') or '每頁最多10支股票')[:60],
+            'codes': list(dict.fromkeys(codes))[:10],
+        })
+    return clean
 
 
 def main():
@@ -194,6 +228,7 @@ def main():
     old = json.loads(OUT.read_text(encoding='utf-8')) if OUT.exists() else {}
     days = old.get('days', {})
     histories = old.get('price_history', {})
+    price_sessions = set(old.get('all_price_sessions', []))
     target = now.date()
     changed = False
 
@@ -231,31 +266,37 @@ def main():
         except Exception as exc:
             print(f'OpenAPI quote/PE unavailable: {exc}; institution data preserved')
 
-    watchlist = load_watchlist()
-    for code in watchlist:
-        merged = {row['date']: row for row in histories.get(code, [])}
-        for month in month_starts(target):
-            try:
-                payload = http_json(STOCK_DAY, {'date': month.strftime('%Y%m%d'), 'stockNo': code, 'response': 'json'})
-                for row in price_rows(payload):
-                    merged[row['date']] = row
-                time.sleep(0.4)
-            except Exception as exc:
-                print(f'{code} {month:%Y-%m}: {exc}')
-        rows = [merged[key] for key in sorted(merged)[-160:]]
-        if rows:
-            histories[code] = rows
+    watchlist_pages = load_watchlist()
+    # A single dated MI_INDEX request contains daily OHLC for the whole listed
+    # market. This avoids one request per stock and lets every listed security
+    # receive KD/Bollinger/support-resistance data after 20 saved sessions.
+    for iso in sorted(days)[-60:]:
+        if iso in price_sessions:
+            continue
+        try:
+            parsed = all_market_rows(http_json(MI_INDEX, {
+                'date': iso.replace('-', ''), 'type': 'ALLBUT0999', 'response': 'json'
+            }), iso)
+            for code, row in parsed.items():
+                merged = {item['date']: item for item in histories.get(code, [])}
+                merged[iso] = row
+                histories[code] = [merged[key] for key in sorted(merged)[-80:]]
+            price_sessions.add(iso)
             changed = True
-            print(f'{code}: {len(rows)} price sessions')
+            print(f'{iso}: {len(parsed)} all-market prices')
+        except Exception as exc:
+            print(f'{iso} MI_INDEX: {exc}')
+        time.sleep(0.55)
 
     if not days:
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.0.0',
+        'version': '2.0.1',
         'days': {key: days[key] for key in sorted(days)[-100:]},
         'price_history': histories,
-        'watchlist': watchlist,
+        'all_price_sessions': sorted(price_sessions)[-80:],
+        'watchlist_pages': watchlist_pages,
         'updated_at': now.isoformat(timespec='seconds'),
         'latest_session': max(days),
     })
