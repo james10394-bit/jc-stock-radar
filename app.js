@@ -1,4 +1,4 @@
-/* TWSE Flow v2.0.1 — rules-based research dashboard using dated TWSE snapshots. */
+/* TWSE Flow v2.1.1 — US/TW holidays, global-war and Taiwan-Strait risk context. */
 const $ = id => document.getElementById(id);
 let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0;
 const fmt = (n,digits=2) => Number.isFinite(n) ? new Intl.NumberFormat('zh-TW',{maximumFractionDigits:digits}).format(n) : '—';
@@ -48,6 +48,45 @@ function analyze(rows,flowRows){
   if(ind.k>80)reasons.push('KD進入80以上高檔區');
   if(ind.k<20)reasons.push('KD進入20以下低檔區');
   return {ind,quote,rawSupport,rawResistance,buyLow,buyHigh,sellLow,sellHigh,stop,flow5,flow20,score,reasons};
+}
+
+const ratio = raw => {const buy=Math.round(Math.max(5,Math.min(95,50+raw)));return {buy,sell:100-buy};};
+function adviceRatios(a){
+  if(!a)return null;
+  const i=a.ind,q=a.quote,band=Math.max(.01,i.upper-i.lower),position=(q.close-i.lower)/band;
+  const kd=ratio((i.k-i.d)*1.2+(i.k<20?18:0)-(i.k>80?18:0));
+  const boll=ratio((.5-position)*70);
+  const above=[i.ma5,i.ma10,i.ma20].filter(x=>q.close>x).length;
+  const ma=ratio((above-1.5)*18+(i.ma5>i.ma10&&i.ma10>i.ma20?8:i.ma5<i.ma10&&i.ma10<i.ma20?-8:0));
+  const downside=Math.max(.01,q.close-a.rawSupport),upside=Math.max(.01,a.rawResistance-q.close);
+  const levels=ratio((upside/(upside+downside)-.5)*70);
+  const inBuy=q.close>=a.buyLow*.98&&q.close<=a.buyHigh*1.02,inSell=q.close>=a.sellLow;
+  const trade=ratio(inBuy?25:inSell?-30:q.close<a.stop?-45:0);
+  const globalBuy=Number(market.global_context?.buy_percent)||50;
+  const technical=Math.round((kd.buy+boll.buy+ma.buy+levels.buy+trade.buy)/5);
+  const combined=Math.round(technical*.7+globalBuy*.3);
+  return {kd,boll,ma,levels,trade,technical:ratio(technical-50),global:ratio(globalBuy-50),combined:ratio(combined-50)};
+}
+function ratioBadge(value){return '<div class="ratio"><b>買 '+value.buy+'%</b><span>賣 '+value.sell+'%</span></div>';}
+function renderAdvice(a){
+  const r=adviceRatios(a),ids=['kdRatio','bollRatio','maRatio','levelRatio','tradeRatio'];
+  if(!r){ids.forEach(id=>$(id).innerHTML=ratioBadge({buy:50,sell:50}));$('overallRatio').innerHTML=ratioBadge({buy:50,sell:50});return;}
+  [['kdRatio',r.kd],['bollRatio',r.boll],['maRatio',r.ma],['levelRatio',r.levels],['tradeRatio',r.trade]].forEach(([id,v])=>$(id).innerHTML=ratioBadge(v));
+  $('overallRatio').innerHTML=ratioBadge(r.combined);
+  $('levelValue').textContent='支撐 '+fmt(a.rawSupport)+' · 壓力 '+fmt(a.rawResistance);
+  $('tradeValue').textContent='買 '+fmt(a.buyLow)+'～'+fmt(a.buyHigh)+' · 停損 '+fmt(a.stop)+' · 賣 '+fmt(a.sellLow)+'～'+fmt(a.sellHigh);
+}
+
+function renderGlobal(){
+  const g=market.global_context||{},items=g.indicators||[],news=g.news||[];
+  $('globalRatio').innerHTML=ratioBadge({buy:Number(g.buy_percent)||50,sell:Number(g.sell_percent)||50});
+  $('globalStamp').textContent=g.updated_at?'資料更新 '+g.updated_at.replace('T',' ').slice(0,16):'全球資料暫時無法更新';
+  $('globalIndicators').innerHTML=items.length?items.map(x=>'<div><span>'+escape(x.name)+'</span><strong class="'+color(x.change_pct)+'">'+(x.change_pct>=0?'+':'')+fmt(x.change_pct)+'%</strong></div>').join(''):'<p>美股指標暫時無資料，個股技術分析仍可正常使用。</p>';
+  const holidays=g.holiday_factors||[];
+  $('holidayFactor').innerHTML=holidays.length?holidays.map(x=>'<div><b>'+escape(x.country)+'</b><span>'+escape(x.name)+' · '+escape(x.date)+'</span><em>'+escape(x.market_closed?'市場休市':'美股照常交易')+'</em></div>').join(''):escape(g.holiday_factor?.label||'未來七日無美台假日');
+  const risks=g.risk_analysis||{},riskCard=(id,data)=>{const d=data||{level:'無資料',points:0,impact:0,headlines:0};$(id).className='riskcard risk-'+(d.level==='高'?'high':d.level==='中'?'mid':'low');$(id).innerHTML='<span>風險等級</span><strong>'+escape(d.level)+'</strong><small>事件分數 '+fmt(d.points,0)+' · 買方影響 '+fmt(d.impact,0)+' 分 · '+fmt(d.headlines,0)+' 則新聞</small>';};
+  riskCard('warRisk',risks.global_war);riskCard('straitRisk',risks.taiwan_strait);
+  $('newsList').innerHTML=news.length?news.map(x=>'<li><span>'+escape(x.category)+'</span><a href="'+escape(x.url)+'" target="_blank" rel="noopener">'+escape(x.title)+'</a><b class="'+(x.score>0?'pos':x.score<0?'neg':'')+'">'+(x.score>0?'偏多':x.score<0?'風險':'中性')+'</b></li>').join(''):'<li>今日重大新聞暫時無法取得。</li>';
 }
 
 function renderWatchlist(){
@@ -116,12 +155,12 @@ function render(){
   $('details').innerHTML=[['外資及陸資',f],['投信',stock.trust],['自營商',stock.dealer]].map(([name,x])=>'<tr><td>'+name+'</td><td>'+lots(x.buy).replace('+','')+'</td><td>'+lots(x.sell).replace('+','')+'</td><td class="'+color(x.net)+'">'+lots(x.net)+'</td></tr>').join('');
   const total=f.buy+f.sell,ratio=Number.isFinite(total)&&total>0?f.buy/total:null;$('gaugeFill').style.width=ratio===null?'0%':(ratio*100).toFixed(1)+'%';$('gaugeText').innerHTML=ratio===null?'買賣分項不足':'<span>買進 '+fmt(ratio*100)+'%</span><span>賣出 '+fmt((1-ratio)*100)+'%</span>';
   $('kd').textContent=a?'K '+fmt(a.ind.k,1)+' / D '+fmt(a.ind.d,1):'—';$('boll').textContent=a?fmt(a.ind.lower)+' / '+fmt(a.ind.middle)+' / '+fmt(a.ind.upper):'—';$('ma').textContent=a?'MA5 '+fmt(a.ind.ma5)+' · MA10 '+fmt(a.ind.ma10)+' · MA20 '+fmt(a.ind.ma20):'—';
-  flowChart(periodRows);technicalChart(priceRows,a);renderPlan(a);renderWatchlist();rank();
+  flowChart(periodRows);technicalChart(priceRows,a);renderPlan(a);renderAdvice(a);renderGlobal();renderWatchlist();rank();
 }
 
 async function load(){
   $('status').textContent='正在載入證交所盤後資料…';
-  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!current())throw new Error('尚未取得交易日資料。');$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.0.1');const first=market.watchlist_pages?.flatMap(x=>x.codes||[]).find(x=>current()[x]);if(!current()[selected])selected=first||Object.keys(current())[0];render();}
+  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!current())throw new Error('尚未取得交易日資料。');$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.1.1');const first=market.watchlist_pages?.flatMap(x=>x.codes||[]).find(x=>current()[x]);if(!current()[selected])selected=first||Object.keys(current())[0];render();}
   catch(e){$('stamp').textContent='尚未取得資料';$('content').hidden=true;$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
 }
 

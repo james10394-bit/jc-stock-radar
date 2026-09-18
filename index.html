@@ -11,7 +11,7 @@
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE FLOW · v2.0.1 五頁自選版</small></div></div>
+  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE FLOW · v2.1.1 美台假日與地緣風險版</small></div></div>
   <a href="https://www.twse.com.tw/" target="_blank" rel="noopener">官方資料：臺灣證券交易所 ↗</a>
 </header>
 <main>
@@ -46,7 +46,7 @@
     <div class="sectiontitle blocktitle"><div class="eyebrow">規則式策略</div><h2>策略判讀與操作區間</h2></div>
     <div class="columns planrow nomargin">
       <article class="panel">
-        <div class="panelhead"><div><h3>分析結論</h3><p>法人與技術面規則綜合評分</p></div></div>
+        <div class="panelhead"><div><h3>分析結論</h3><p>技術面 70%＋全球因素 30% 規則式評分</p></div><div id="overallRatio"></div></div>
         <div id="tradePlan" class="signal neutral"></div>
       </article>
       <article class="panel">
@@ -75,11 +75,28 @@
     <div class="columns techrow nomargin">
       <article class="panel wide"><div class="panelhead"><div><h3>價格、布林通道與支撐壓力</h3><p>藍線收盤價 · 紫線布林上下軌 · 黃線20日均線</p></div></div><div id="techChart" class="chart tech"></div></article>
       <article class="panel indicators">
-        <h3>技術指標</h3>
-        <div><span>KD（9,3,3）</span><strong id="kd">—</strong></div>
-        <div><span>布林 下／中／上</span><strong id="boll">—</strong></div>
-        <div><span>移動平均線</span><strong id="ma">—</strong></div>
+        <h3>各項指標買賣比例</h3>
+        <div class="indicatoritem"><span>KD（9,3,3）</span><span id="kdRatio"></span><strong id="kd">—</strong></div>
+        <div class="indicatoritem"><span>布林 下／中／上</span><span id="bollRatio"></span><strong id="boll">—</strong></div>
+        <div class="indicatoritem"><span>MA5／MA10／MA20</span><span id="maRatio"></span><strong id="ma">—</strong></div>
+        <div class="indicatoritem"><span>支撐與壓力</span><span id="levelRatio"></span><strong id="levelValue">—</strong></div>
+        <div class="indicatoritem"><span>買進／停損／賣出區間</span><span id="tradeRatio"></span><strong id="tradeValue">—</strong></div>
         <p>技術指標採日線收盤資料；盤中價格變動不會即時反映。</p>
+      </article>
+    </div>
+
+    <div class="sectiontitle blocktitle"><div class="eyebrow">全球事件風險</div><h2>美股、連假與重大新聞影響</h2></div>
+    <div class="columns globalrow nomargin">
+      <article class="panel">
+        <div class="panelhead"><div><h3>全球環境買賣比例</h3><p id="globalStamp">讀取中…</p></div><div id="globalRatio"></div></div>
+        <div id="globalIndicators" class="globalindicators"></div>
+        <div class="holiday"><span>美國／台灣假日與休市分析</span><strong id="holidayFactor">—</strong></div>
+        <p class="hint">美股指數、VIX、新聞標題關鍵字與休市風險採固定權重計算。</p>
+      </article>
+      <article class="panel">
+        <div class="panelhead"><div><h3>今日全球重點新聞</h3><p>川普政策、全球戰爭、台海、半導體與全球股市</p></div></div>
+        <div class="riskgrid"><div><h4>全球戰爭分析</h4><div id="warRisk" class="riskcard"></div></div><div><h4>台海情勢分析</h4><div id="straitRisk" class="riskcard"></div></div></div>
+        <ul id="newsList" class="newslist"></ul>
       </article>
     </div>
 
@@ -91,7 +108,7 @@
   </section>
 </main>
 <footer>
-  資料取自臺灣證券交易所公開盤後資料。KD、布林通道、支撐壓力與買賣區間均為固定公式計算，僅供研究參考，不構成投資建議。<br>
+  資料取自臺灣證券交易所公開盤後資料及公開市場／新聞摘要。所有比例均為固定公式評分，不代表上漲機率或獲利保證，僅供研究參考，不構成投資建議。<br>
   <a href="https://www.twse.com.tw/zh/trading/foreign/t86.html">三大法人</a> · <a href="https://www.twse.com.tw/zh/trading/historical/bwibbu-day.html">本益比</a> · <a href="https://www.twse.com.tw/zh/trading/historical/stock-day.html">個股日成交</a>
 </footer>
 <script src="app.js" defer></script>
