@@ -35,11 +35,19 @@ class TestTWSE(unittest.TestCase):
             'high': 125, 'low': 118.5, 'close': 124.5
         }])
 
-    def test_month_seed_count(self):
-        months = list(update.month_starts(update.dt.date(2026, 9, 18)))
-        self.assertEqual(len(months), 7)
-        self.assertEqual(months[0], update.dt.date(2026, 3, 1))
-        self.assertEqual(months[-1], update.dt.date(2026, 9, 1))
+    def test_all_market_rows(self):
+        payload = {'stat': 'OK', 'tables': [{'fields': [
+            '證券代號', '證券名稱', '成交股數', '開盤價', '最高價', '最低價', '收盤價'
+        ], 'data': [['2615', '萬海', '1,250,000', '120', '125', '118.5', '124.5']]}]}
+        self.assertEqual(update.all_market_rows(payload, '2026-09-17')['2615'], {
+            'date': '2026-09-17', 'volume': 1250000, 'open': 120,
+            'high': 125, 'low': 118.5, 'close': 124.5
+        })
+
+    def test_five_watchlist_pages(self):
+        pages = update.load_watchlist()
+        self.assertEqual(len(pages), 5)
+        self.assertTrue(all(len(page['codes']) <= 10 for page in pages))
 
 
 if __name__ == '__main__':
