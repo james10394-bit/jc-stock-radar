@@ -7,17 +7,31 @@ import re
 import time
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'data' / 'market.json'
 WATCHLIST = ROOT / 'data' / 'watchlist.json'
+RISK_CONFIG = ROOT / 'data' / 'risk_config.json'
 TAIPEI = ZoneInfo('Asia/Taipei')
 T86 = 'https://www.twse.com.tw/rwd/zh/fund/T86'
 QUOTES = 'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL'
 PE = 'https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_d'
 MI_INDEX = 'https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX'
+YAHOO_CHART = 'https://query1.finance.yahoo.com/v8/finance/chart/'
+GOOGLE_NEWS = 'https://news.google.com/rss/search'
+
+POSITIVE_NEWS = ('上漲', '走高', '降息', '寬鬆', '成長', '優於預期', '突破', '創高', '和平', '停火',
+                 'rally', 'gain', 'rate cut', 'growth', 'beats', 'ceasefire', 'peace')
+NEGATIVE_NEWS = ('下跌', '重挫', '升息', '衰退', '通膨', '關稅', '制裁', '戰爭', '攻擊', '飛彈', '危機',
+                 '跌幅', 'tariff', 'sanction', 'war', 'attack', 'missile', 'crisis', 'recession', 'inflation')
+WAR_WORDS = ('戰爭', '開戰', '空襲', '攻擊', '飛彈', '無人機', '入侵', '衝突', '封鎖',
+             'war', 'airstrike', 'attack', 'missile', 'drone', 'invasion', 'conflict', 'blockade')
+EASING_WORDS = ('停火', '和談', '和平協議', '降溫', '撤軍', 'ceasefire', 'peace talk', 'de-escalation', 'withdrawal')
+STRAIT_WORDS = ('台海', '台灣海峽', '解放軍', '軍演', '繞台', '共機', '封鎖台灣', 'taiwan strait',
+                'pla drill', 'military exercise', 'blockade taiwan')
 
 
 def number(value):
@@ -204,6 +218,161 @@ def http_json(url, params=None):
         return json.load(response)
 
 
+def market_indicator(symbol, name):
+    payload = http_json(YAHOO_CHART + urllib.parse.quote(symbol), {
+        'range': '10d', 'interval': '1d', 'events': 'history'
+    })
+    result = payload['chart']['result'][0]
+    closes = [x for x in result['indicators']['quote'][0]['close'] if x is not None]
+    if len(closes) < 2:
+        raise ValueError(f'{name} data unavailable')
+    change = (closes[-1] / closes[-2] - 1) * 100
+    return {'name': name, 'symbol': symbol, 'close': round(closes[-1], 2), 'change_pct': round(change, 2)}
+
+
+def news_score(title):
+    text = title.lower()
+    positive = sum(1 for word in POSITIVE_NEWS if word in text)
+    negative = sum(1 for word in NEGATIVE_NEWS if word in text)
+    return max(-3, min(3, positive - negative))
+
+
+def nth_weekday(year, month, weekday, nth):
+    day = dt.date(year, month, 1)
+    return day + dt.timedelta(days=(weekday - day.weekday()) % 7 + 7 * (nth - 1))
+
+
+def last_weekday(year, month, weekday):
+    first_next = dt.date(year + (month == 12), 1 if month == 12 else month + 1, 1)
+    day = first_next - dt.timedelta(days=1)
+    return day - dt.timedelta(days=(day.weekday() - weekday) % 7)
+
+
+def observed(day):
+    if day.weekday() == 5:
+        return day - dt.timedelta(days=1)
+    if day.weekday() == 6:
+        return day + dt.timedelta(days=1)
+    return day
+
+
+def easter_date(year):
+    a, b, c = year % 19, year // 100, year % 100
+    d, e = b // 4, b % 4
+    f, g = (b + 8) // 25, (b - (b + 8) // 25 + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    return dt.date(year, month, (h + l - 7 * m + 114) % 31 + 1)
+
+
+def us_holidays(year):
+    holidays = {
+        observed(dt.date(year, 1, 1)): ('美國元旦', True),
+        nth_weekday(year, 1, 0, 3): ('馬丁路德金恩紀念日', True),
+        nth_weekday(year, 2, 0, 3): ('美國總統日', True),
+        easter_date(year) - dt.timedelta(days=2): ('美股耶穌受難日休市', True),
+        last_weekday(year, 5, 0): ('美國陣亡將士紀念日', True),
+        observed(dt.date(year, 6, 19)): ('六月節', True),
+        observed(dt.date(year, 7, 4)): ('美國獨立紀念日', True),
+        nth_weekday(year, 9, 0, 1): ('美國勞動節', True),
+        nth_weekday(year, 10, 0, 2): ('哥倫布日／原住民族日', False),
+        observed(dt.date(year, 11, 11)): ('美國退伍軍人節', False),
+        nth_weekday(year, 11, 3, 4): ('美國感恩節', True),
+        observed(dt.date(year, 12, 25)): ('美國聖誕節', True),
+    }
+    return holidays
+
+
+def risk_block(news, category, words):
+    selected = [item for item in news if item['category'] == category]
+    points = 0
+    for item in selected:
+        text = item['title'].lower()
+        points += sum(1 for word in words if word in text)
+        points -= sum(1 for word in EASING_WORDS if word in text)
+    points = max(0, points)
+    level = '高' if points >= 6 else '中' if points >= 3 else '低'
+    return {'level': level, 'points': points, 'impact': -min(15, points * 2), 'headlines': len(selected)}
+
+
+def fetch_global_context(now):
+    indicators = []
+    for symbol, name in [('^GSPC', 'S&P 500'), ('^IXIC', 'NASDAQ'), ('^DJI', '道瓊'), ('^VIX', 'VIX恐慌指數')]:
+        try:
+            indicators.append(market_indicator(symbol, name))
+        except Exception as exc:
+            print(f'{name}: {exc}')
+        time.sleep(0.2)
+
+    topics = [
+        ('全球市場', '台股 美股 半導體 全球股市 when:1d'),
+        ('川普政策', 'Trump tariff trade Taiwan semiconductor when:1d'),
+        ('全球戰爭', 'global war missile attack ceasefire oil market when:1d'),
+        ('台海風險', '台海 台灣海峽 解放軍 軍演 封鎖 Taiwan Strait when:2d'),
+    ]
+    news = []
+    for category, query in topics:
+        try:
+            url = GOOGLE_NEWS + '?' + urllib.parse.urlencode({'q': query, 'hl': 'zh-TW', 'gl': 'TW', 'ceid': 'TW:zh-Hant'})
+            request = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 TWSE-Flow/2.1'})
+            with urllib.request.urlopen(request, timeout=25) as response:
+                root = ET.fromstring(response.read())
+            for item in root.findall('./channel/item')[:6]:
+                title = (item.findtext('title') or '').strip()
+                if title:
+                    news.append({'category': category, 'title': title, 'url': item.findtext('link') or '',
+                                 'published': item.findtext('pubDate') or '', 'score': news_score(title)})
+        except Exception as exc:
+            print(f'{category} news: {exc}')
+
+    raw = 0.0
+    for item in indicators:
+        change = item['change_pct'] * (-1 if item['symbol'] == '^VIX' else 1)
+        raw += max(-4, min(4, change)) * 3
+    raw += sum(item['score'] for item in news) * 1.4
+    war = risk_block(news, '全球戰爭', WAR_WORDS)
+    strait = risk_block(news, '台海風險', STRAIT_WORDS + WAR_WORDS)
+    raw += war['impact'] + strait['impact']
+    weekday = now.weekday()
+    holiday = {'label': '一般交易週', 'score': 0}
+    holiday_factors = []
+    config = json.loads(RISK_CONFIG.read_text(encoding='utf-8')) if RISK_CONFIG.exists() else {}
+    upcoming = []
+    for raw_date, name in (config.get('tw_holidays') or config.get('holidays') or {}).items():
+        try:
+            day = dt.date.fromisoformat(raw_date)
+            gap = (day - now.date()).days
+            if 0 <= gap <= 7:
+                upcoming.append((gap, day, str(name), '台灣', True))
+        except (TypeError, ValueError):
+            continue
+    for year in {now.year, now.year + 1}:
+        for day, (name, market_closed) in us_holidays(year).items():
+            gap = (day - now.date()).days
+            if 0 <= gap <= 7:
+                upcoming.append((gap, day, name, '美國', market_closed))
+    if upcoming:
+        for gap, day, name, country, market_closed in sorted(upcoming):
+            score = -6 if country == '台灣' and gap <= 3 else -4 if market_closed and gap <= 3 else -2
+            status = '市場休市' if market_closed else '國定假日（美股照常交易）'
+            holiday_factors.append({'country': country, 'date': day.isoformat(), 'name': name,
+                                    'days_away': gap, 'market_closed': market_closed, 'score': score,
+                                    'label': f'{country}｜{name}｜{status}｜距今{gap}天'})
+            raw += score
+        holiday = {'label': holiday_factors[0]['label'], 'score': sum(x['score'] for x in holiday_factors)}
+    elif weekday == 4:
+        holiday = {'label': '週末前風險：留意兩日休市期間消息', 'score': -3}
+        raw -= 3
+    buy = round(max(10, min(90, 50 + raw)))
+    return {'updated_at': now.isoformat(timespec='seconds'), 'buy_percent': buy, 'sell_percent': 100 - buy,
+            'holiday_factor': holiday, 'holiday_factors': holiday_factors, 'indicators': indicators, 'news': news[:16],
+            'risk_analysis': {'global_war': war, 'taiwan_strait': strait},
+            'method': '美股指數日變動、VIX、美台假日、全球戰爭與台海新聞關鍵字之規則式評分'}
+
+
 def load_watchlist():
     raw = json.loads(WATCHLIST.read_text(encoding='utf-8')) if WATCHLIST.exists() else {}
     pages = raw.get('pages')
@@ -267,6 +436,12 @@ def main():
             print(f'OpenAPI quote/PE unavailable: {exc}; institution data preserved')
 
     watchlist_pages = load_watchlist()
+    try:
+        global_context = fetch_global_context(now)
+        changed = True
+    except Exception as exc:
+        print(f'Global context unavailable: {exc}')
+        global_context = old.get('global_context', {})
     # A single dated MI_INDEX request contains daily OHLC for the whole listed
     # market. This avoids one request per stock and lets every listed security
     # receive KD/Bollinger/support-resistance data after 20 saved sessions.
@@ -292,11 +467,12 @@ def main():
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.0.1',
+        'version': '2.1.1',
         'days': {key: days[key] for key in sorted(days)[-100:]},
         'price_history': histories,
         'all_price_sessions': sorted(price_sessions)[-80:],
         'watchlist_pages': watchlist_pages,
+        'global_context': global_context,
         'updated_at': now.isoformat(timespec='seconds'),
         'latest_session': max(days),
     })
