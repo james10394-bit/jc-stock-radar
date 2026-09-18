@@ -49,6 +49,19 @@ class TestTWSE(unittest.TestCase):
         self.assertEqual(len(pages), 5)
         self.assertTrue(all(len(page['codes']) <= 10 for page in pages))
 
+    def test_news_keyword_scoring(self):
+        self.assertLess(update.news_score('War attack triggers market crisis'), 0)
+        self.assertGreater(update.news_score('Rate cut fuels market rally and growth'), 0)
+        self.assertEqual(update.news_score('Company holds annual meeting'), 0)
+
+    def test_us_holidays_and_risk_blocks(self):
+        holidays = update.us_holidays(2026)
+        self.assertIn(update.dt.date(2026, 7, 3), holidays)
+        self.assertTrue(holidays[update.dt.date(2026, 7, 3)][1])
+        news = [{'category': '台海風險', 'title': '台海軍演與飛彈封鎖風險升高'}]
+        risk = update.risk_block(news, '台海風險', update.STRAIT_WORDS + update.WAR_WORDS)
+        self.assertGreater(risk['points'], 0)
+
 
 if __name__ == '__main__':
     unittest.main()
