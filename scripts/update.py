@@ -19,6 +19,7 @@ TAIPEI = ZoneInfo('Asia/Taipei')
 T86 = 'https://www.twse.com.tw/rwd/zh/fund/T86'
 QUOTES = 'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL'
 PE = 'https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_d'
+COMPANY_INFO = 'https://openapi.twse.com.tw/v1/opendata/t187ap03_L'
 MI_INDEX = 'https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX'
 YAHOO_CHART = 'https://query1.finance.yahoo.com/v8/finance/chart/'
 GOOGLE_NEWS = 'https://news.google.com/rss/search'
@@ -32,6 +33,57 @@ WAR_WORDS = ('戰爭', '開戰', '空襲', '攻擊', '飛彈', '無人機', '入
 EASING_WORDS = ('停火', '和談', '和平協議', '降溫', '撤軍', 'ceasefire', 'peace talk', 'de-escalation', 'withdrawal')
 STRAIT_WORDS = ('台海', '台灣海峽', '解放軍', '軍演', '繞台', '共機', '封鎖台灣', 'taiwan strait',
                 'pla drill', 'military exercise', 'blockade taiwan')
+
+INDUSTRY_BUSINESS = {
+    '01': ('水泥工業', '水泥、預拌混凝土與建材相關業務'),
+    '02': ('食品工業', '食品製造、加工與通路銷售'),
+    '03': ('塑膠工業', '塑膠原料、加工品與化工材料'),
+    '04': ('紡織纖維', '紡織、成衣、布料與機能材料'),
+    '05': ('電機機械', '工業機械、馬達與自動化設備'),
+    '06': ('電器電纜', '電線電纜、電力與電器設備'),
+    '08': ('玻璃陶瓷', '玻璃、陶瓷與相關建材'),
+    '09': ('造紙工業', '紙漿、紙品與包裝材料'),
+    '10': ('鋼鐵工業', '鋼鐵冶煉、加工與金屬材料'),
+    '11': ('橡膠工業', '輪胎與橡膠製品'),
+    '12': ('汽車工業', '汽車、零組件與車用系統'),
+    '14': ('建材營造', '建設、營造與不動產開發'),
+    '15': ('航運業', '海運、航空、物流與運輸服務'),
+    '16': ('觀光餐旅', '旅館、餐飲、觀光與休閒服務'),
+    '17': ('金融保險', '銀行、保險、證券與金融服務'),
+    '18': ('貿易百貨', '商品貿易、零售與百貨通路'),
+    '20': ('其他業', '多元產品製造或專業服務'),
+    '21': ('化學工業', '化學材料、原料與特用化學品'),
+    '22': ('生技醫療', '藥品、生技、醫材與健康服務'),
+    '23': ('油電燃氣', '能源、電力、油品與天然氣'),
+    '24': ('半導體業', '晶片設計、製造、封測與半導體供應鏈'),
+    '25': ('電腦及週邊', '電腦、伺服器與週邊設備'),
+    '26': ('光電業', '面板、光學與光電元件'),
+    '27': ('通信網路', '電信、網路與通訊設備服務'),
+    '28': ('電子零組件', '電子零組件、連接器與電路板'),
+    '29': ('電子通路', '電子零組件代理與通路服務'),
+    '30': ('資訊服務', '軟體、系統整合與資訊服務'),
+    '31': ('其他電子', '電子製造、設備與其他電子產品'),
+    '35': ('綠能環保', '再生能源、節能與環境服務'),
+    '36': ('數位雲端', '雲端、數位平台與網路服務'),
+    '37': ('運動休閒', '運動器材、休閒產品與服務'),
+    '38': ('居家生活', '居家用品、生活消費與相關服務'),
+}
+
+BUSINESS_OVERRIDES = {
+    '2330': '先進晶圓代工與半導體製造', '2317': '電子製造服務、伺服器與消費電子組裝',
+    '2454': '手機與通訊晶片設計', '2308': '電源管理、工業自動化與資料中心設備',
+    '2382': '電腦、伺服器與雲端設備製造', '2412': '行動通訊、固網與網路服務',
+    '6505': '石化、塑膠原料與能源相關業務', '2603': '國際貨櫃海運與物流',
+    '2609': '國際貨櫃海運與碼頭物流', '2615': '散裝航運與船舶運輸',
+    '2605': '散裝航運與船舶代理', '2606': '貨櫃海運與物流服務',
+    '2612': '港埠、貨櫃碼頭與物流服務', '2618': '航空客貨運與航空服務',
+    '2637': '散裝航運與船舶運輸', '2303': '晶圓代工與半導體製造',
+    '2379': 'IC 設計與記憶體相關晶片', '3037': '印刷電路板與高階載板',
+    '3231': '電腦、伺服器與電子製造服務', '6669': '伺服器管理晶片設計',
+    '2368': '印刷電路板製造', '2344': '記憶體晶片製造',
+    '3443': 'IC 設計與高速傳輸晶片', '3661': '高階覆晶封裝基板',
+    '3017': '伺服器機殼、散熱與機構件', '4958': '連接器、線材與電子零組件',
+}
 
 
 def number(value):
@@ -142,6 +194,29 @@ def rows_by_code(payload):
     if not isinstance(payload, list):
         raise ValueError('Expected an array from TWSE OpenAPI')
     return {str(x.get('Code', '')).strip(): x for x in payload if isinstance(x, dict) and x.get('Code')}
+
+
+def company_profiles(payload):
+    """Build concise company descriptions from the official listed-company registry."""
+    if not isinstance(payload, list):
+        raise ValueError('Expected company profile array from TWSE OpenAPI')
+    result = {}
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        code = str(row.get('公司代號', '')).strip()
+        if not re.fullmatch(r'\d{4,6}', code):
+            continue
+        industry_code = str(row.get('產業別', '')).strip().zfill(2)
+        industry, generic = INDUSTRY_BUSINESS.get(industry_code, ('其他業', '多元產品製造或專業服務'))
+        result[code] = {
+            'name': str(row.get('公司簡稱') or row.get('公司名稱') or '').strip(),
+            'industry': industry,
+            'business': BUSINESS_OVERRIDES.get(code, generic),
+        }
+    if not result:
+        raise ValueError('No company profiles returned by TWSE OpenAPI')
+    return result
 
 
 def extract_quote(row):
@@ -432,6 +507,12 @@ def main():
         time.sleep(0.55)
 
     latest = max(days) if days else None
+    try:
+        profiles = company_profiles(http_json(COMPANY_INFO))
+        changed = True
+    except Exception as exc:
+        print(f'Company profiles unavailable: {exc}')
+        profiles = old.get('company_profiles', {})
     if latest:
         try:
             quote_rows = rows_by_code(http_json(QUOTES))
@@ -481,11 +562,12 @@ def main():
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.4.0',
+        'version': '2.4.1',
         'days': {key: days[key] for key in sorted(days)[-100:]},
         'price_history': histories,
         'all_price_sessions': sorted(price_sessions)[-80:],
         'watchlist_pages': watchlist_pages,
+        'company_profiles': profiles,
         'global_context': global_context,
         'updated_at': now.isoformat(timespec='seconds'),
         'latest_session': max(days),

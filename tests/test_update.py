@@ -49,6 +49,14 @@ class TestTWSE(unittest.TestCase):
         self.assertEqual(len(pages), 5)
         self.assertTrue(all(len(page['codes']) <= 10 for page in pages))
 
+    def test_company_profiles(self):
+        rows = [{'公司代號': '2330', '公司簡稱': '台積電', '產業別': '24'},
+                {'公司代號': '1101', '公司簡稱': '台泥', '產業別': '01'}]
+        profiles = update.company_profiles(rows)
+        self.assertEqual(profiles['2330']['industry'], '半導體業')
+        self.assertIn('晶圓代工', profiles['2330']['business'])
+        self.assertIn('水泥', profiles['1101']['business'])
+
     def test_news_keyword_scoring(self):
         self.assertLess(update.news_score('War attack triggers market crisis'), 0)
         self.assertGreater(update.news_score('Rate cut fuels market rally and growth'), 0)

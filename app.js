@@ -1,6 +1,6 @@
-/* TWSE Flow v2.4.0 — editable watch room plus market analysis. */
+/* TWSE Flow v2.4.1 — historical institution selector and company summaries. */
 const $ = id => document.getElementById(id);
-let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0;
+let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0, institutionDate = null;
 let watchPagesData = [], editingPages = [];
 const WATCH_STORAGE_KEY = 'jc-stock-radar-watchlists-v1';
 const fmt = (n,digits=2) => Number.isFinite(n) ? new Intl.NumberFormat('zh-TW',{maximumFractionDigits:digits}).format(n) : '—';
@@ -8,7 +8,8 @@ const lots = n => Number.isFinite(n) ? (n>=0?'+':'')+fmt(n/1000)+' 張' : '—';
 const color = n => Number.isFinite(n) ? (n>=0?'pos':'neg') : '';
 const escape = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const days = () => Object.keys(market.days||{}).sort();
-const current = () => market?.days?.[market?.latest_session]||{};
+const latestMarket = () => market?.days?.[market?.latest_session]||{};
+const current = () => market?.days?.[institutionDate||market?.latest_session]||latestMarket();
 const flows = code => days().map(date=>({date:date,...market.days[date][code]})).filter(x=>x.foreign);
 const prices = code => (market.price_history?.[code]||[]).filter(x=>['open','high','low','close'].every(k=>Number.isFinite(x[k])));
 const last = a => a[a.length-1];
@@ -154,8 +155,9 @@ function renderWatchlist(){
   $('watchTitle').textContent=page.title||'我的自選股';
   $('watchSubtitle').textContent=page.subtitle||'每頁最多 10 支股票';
   $('watchlist').innerHTML=(page.codes||[]).slice(0,10).map(code=>{
-    const stock=current()[code],price=last(prices(code))?.close??stock?.quote?.close,net=stock?.foreign?.net;
-    return '<button data-watch="'+escape(code)+'" class="'+(code===selected?'active':'')+'"><span class="watchcode">'+escape(code)+'</span><strong>'+escape(stock?.name||'尚無名稱')+'</strong><small>'+(Number.isFinite(price)?fmt(price)+' 元':'等待資料')+(Number.isFinite(net)?' · 外資 '+lots(net):'')+'</small></button>';
+    const stock=current()[code]||latestMarket()[code],profile=market.company_profiles?.[code]||{},price=last(prices(code))?.close??stock?.quote?.close,net=current()[code]?.foreign?.net;
+    const business=profile.business||profile.industry||'公司業務資料更新中';
+    return '<button data-watch="'+escape(code)+'" class="'+(code===selected?'active':'')+'"><span class="watchcode">'+escape(code)+'</span><strong>'+escape(stock?.name||profile.name||'尚無名稱')+'</strong><small class="watchbusiness">'+escape(business)+'</small><small>'+(Number.isFinite(price)?fmt(price)+' 元':'等待資料')+(Number.isFinite(net)?' · 外資 '+lots(net):'')+'</small></button>';
   }).join('')||'<div class="editornote">這個分類尚未加入股票，請點「編輯」。</div>';
 }
 function renderWatchEditor(){
@@ -216,30 +218,31 @@ function rank(){
 }
 
 function render(){
-  if(!market)return; const stock=current()[selected];
+  if(!market)return; const stock=current()[selected],latestStock=latestMarket()[selected]||stock;
   if(!stock){$('content').hidden=true;$('status').textContent='找不到這個上市股票代號。';return;}
-  $('status').textContent='';$('content').hidden=false;$('title').textContent=selected+' · '+stock.name;$('dateBadge').textContent='法人資料：'+market.latest_session;
-  const f=stock.foreign,period=Number($('period').value),allFlows=flows(selected),periodRows=allFlows.slice(-period);
+  $('status').textContent='';$('content').hidden=false;$('title').textContent=selected+' · '+(latestStock.name||stock.name);
+  const f=stock.foreign,period=Number($('period').value),allFlows=flows(selected),availableFlows=allFlows.filter(x=>x.date<=(institutionDate||market.latest_session)),periodRows=availableFlows.slice(-period);
   setValue('foreignToday',lots(f.net),f.net);$('foreignSub').textContent='買進 '+lots(f.buy).replace('+','')+' ｜ 賣出 '+lots(f.sell).replace('+','');
   setValue('foreignPeriod',lots(sumNet(periodRows)),sumNet(periodRows));setValue('trustPeriod',lots(sumNet(periodRows,'trust')),sumNet(periodRows,'trust'));setValue('dealerPeriod',lots(sumNet(periodRows,'dealer')),sumNet(periodRows,'dealer'));
-  let streak=0;for(const row of [...allFlows].reverse()){if(!row.foreign.net||Math.sign(row.foreign.net)!==Math.sign(f.net))break;streak++;}
+  let streak=0;for(const row of [...availableFlows].reverse()){if(!row.foreign.net||Math.sign(row.foreign.net)!==Math.sign(f.net))break;streak++;}
   $('foreignStreak').textContent=periodRows.length+'個交易日 · '+(streak?'連續'+streak+'日'+(f.net>0?'買超':'賣超'):'無連續訊號');
-  const priceRows=prices(selected),a=analyze(priceRows,allFlows),price=last(priceRows)?.close??stock.quote?.close,pe=stock.pe;
+  const priceRows=prices(selected),a=analyze(priceRows,availableFlows),price=last(priceRows)?.close??latestStock.quote?.close,pe=latestStock.pe;
   $('closePe').textContent=Number.isFinite(price)?fmt(price)+' 元 · '+(Number.isFinite(pe)&&pe>0?fmt(pe)+' 倍':'本益比無資料'):'股價尚無資料';
   $('details').innerHTML=[['外資及陸資',f],['投信',stock.trust],['自營商',stock.dealer]].map(([name,x])=>'<tr><td>'+name+'</td><td>'+lots(x.buy).replace('+','')+'</td><td>'+lots(x.sell).replace('+','')+'</td><td class="'+color(x.net)+'">'+lots(x.net)+'</td></tr>').join('');
   const total=f.buy+f.sell,ratio=Number.isFinite(total)&&total>0?f.buy/total:null;$('gaugeFill').style.width=ratio===null?'0%':(ratio*100).toFixed(1)+'%';$('gaugeText').innerHTML=ratio===null?'買賣分項不足':'<span>買進 '+fmt(ratio*100)+'%</span><span>賣出 '+fmt((1-ratio)*100)+'%</span>';
   $('kd').textContent=a?'K '+fmt(a.ind.k,1)+' / D '+fmt(a.ind.d,1):'—';$('boll').textContent=a?fmt(a.ind.lower)+' / '+fmt(a.ind.middle)+' / '+fmt(a.ind.upper):'—';$('ma').textContent=a?'MA5 '+fmt(a.ind.ma5)+' · MA10 '+fmt(a.ind.ma10)+' · MA20 '+fmt(a.ind.ma20):'—';
-  flowChart(periodRows);technicalChart(priceRows,a);renderPlan(a);renderAdvice(a);renderAdvisor(a,allFlows);renderGlobal();renderWatchlist();rank();
+  flowChart(periodRows);technicalChart(priceRows,a);renderPlan(a);renderAdvice(a);renderAdvisor(a,availableFlows);renderGlobal();renderWatchlist();rank();
 }
 
 async function load(){
   $('status').textContent='正在載入證交所盤後資料…';
-  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!current())throw new Error('尚未取得交易日資料。');loadWatchPages();$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.4.0');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>current()[x]);if(!current()[selected])selected=first||Object.keys(current())[0];render();}
+  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.4.1');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
   catch(e){$('stamp').textContent='尚未取得資料';$('content').hidden=true;$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
 }
 
 $('search').addEventListener('change',e=>{const term=e.target.value.trim(),list=Object.entries(current());const hit=list.find(([code])=>code===term)||list.find(([code,s])=>code.includes(term)||s.name.includes(term));if(hit){selected=hit[0];e.target.value='';render();}else if(term)$('status').textContent='沒有找到這個上市股票。';});
 $('search').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();});$('period').addEventListener('change',render);$('refresh').addEventListener('click',load);
+$('institutionDate').addEventListener('change',e=>{institutionDate=e.target.value;render();});
 $('watchlist').addEventListener('click',e=>{const b=e.target.closest('[data-watch]');if(b&&current()[b.dataset.watch]){selected=b.dataset.watch;render();}});
 $('watchPages').addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b){activeWatchPage=Number(b.dataset.page);renderWatchlist();}});
 $('editWatch').addEventListener('click',openWatchEditor);
