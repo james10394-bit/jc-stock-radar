@@ -603,3 +603,117 @@ footer {
 .advisor-empty { color: var(--muted); font-size: 13px; }
 @media (max-width: 850px) { .advisorfactors { grid-template-columns: repeat(2, 1fr); } .advisornote { grid-template-columns: 1fr; } }
 @media (max-width: 610px) { .advisorfactors { grid-template-columns: 1fr; } }
+
+/* v2.4.0 — desktop right rail, mobile watch drawer and browser-side editor */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  grid-template-areas: "analysis watch";
+  gap: 18px;
+  align-items: start;
+  margin-top: 18px;
+}
+.analysiscol { grid-area: analysis; min-width: 0; }
+.watchhub {
+  grid-area: watch;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  margin: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  scrollbar-width: thin;
+}
+.watchtop { display: flex; align-items: start; justify-content: space-between; gap: 10px; }
+.watchtop .sectiontitle h2 { font-size: 23px; }
+.watchtop .sectiontitle p { line-height: 1.55; }
+.watchactions { display: flex; gap: 6px; flex-shrink: 0; }
+.watchactions button,
+.watcheditor button {
+  cursor: pointer;
+  border: 1px solid #3a5570;
+  border-radius: 8px;
+  background: #102037;
+  color: #d7e4ef;
+  padding: 8px 10px;
+  font: inherit;
+}
+.watchactions button:hover,
+.watcheditor button:hover { border-color: var(--mint); color: #fff; }
+#toggleWatch { display: none; }
+.watchpages { display: flex; flex-direction: column; gap: 7px; margin-top: 17px; }
+.watchpages button { width: 100%; grid-template-columns: 42px 1fr; align-items: center; gap: 7px; padding: 10px; }
+.watchpages button small { white-space: nowrap; }
+.watchheading { display: block; margin: 20px 0 10px; }
+.watchheading h3 { font-size: 19px; }
+.watchheading > span { display: block; margin-top: 6px; }
+.watchlist { display: grid; grid-template-columns: 1fr; gap: 7px; overflow: visible; }
+.watchlist button { width: 100%; }
+.watchlist .watchcode { margin-left: 0; }
+
+.watcheditor {
+  width: min(820px, calc(100% - 28px));
+  max-height: min(820px, calc(100vh - 28px));
+  overflow: auto;
+  border: 1px solid #405b76;
+  border-radius: 18px;
+  color: #edf5ff;
+  background: #0d1929;
+  padding: 22px;
+  box-shadow: 0 28px 80px #000b;
+}
+.watcheditor::backdrop { background: #030812cc; backdrop-filter: blur(4px); }
+.editorhead { display: flex; justify-content: space-between; align-items: start; gap: 15px; }
+.editorhead h2 { margin: 5px 0 0; font-size: 27px; }
+.watcheditor .iconbutton { width: 38px; height: 38px; padding: 0; font-size: 25px; }
+.editorhelp { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.editorpages { display: grid; gap: 12px; margin: 18px 0; }
+.editorpage { padding: 16px; border: 1px solid #304963; border-radius: 13px; background: #111f32; }
+.editorpagehead { display: grid; grid-template-columns: 1fr 1.4fr auto; gap: 9px; align-items: end; }
+.editorpage label { display: grid; gap: 6px; color: #91a8c0; font-size: 11px; }
+.editorpage input {
+  width: 100%; height: 39px; min-width: 0; border: 1px solid #38536f; border-radius: 8px;
+  color: #edf5ff; background: #091625; padding: 0 10px; font: inherit;
+}
+.editorpage input:focus { outline: 2px solid var(--mint); }
+.deletepage { color: #ff9ba4 !important; border-color: #70434c !important; }
+.editorcodes { display: flex; flex-wrap: wrap; gap: 7px; margin: 13px 0 10px; }
+.editorchip { display: inline-flex; align-items: center; gap: 7px; padding: 7px 9px; border: 1px solid #36516c; border-radius: 20px; color: #d6e4f1; background: #0c1929; font-size: 12px; }
+.editorchip button { border: 0; padding: 0; color: #ff929c; background: transparent; font-size: 17px; line-height: 1; }
+.addstock { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.editorbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; position: sticky; bottom: -22px; padding: 13px 0 2px; background: #0d1929; }
+.editorspacer { flex: 1; }
+.watcheditor .primarybutton { background: #1f706d; border-color: #48caaa; color: #fff; }
+.watcheditor .dangerbutton { color: #ff9ba4; }
+.editornote { color: #91a8c0; font-size: 12px; padding: 5px 0; }
+
+@media (max-width: 900px) {
+  .workspace { grid-template-columns: 1fr; grid-template-areas: "watch" "analysis"; }
+  .watchhub { position: static; max-height: none; }
+  #toggleWatch { display: inline-block; }
+  .watchhub.collapsed .watchbody { display: none; }
+  .watchhub.collapsed #toggleWatch::after { content: "展開"; }
+  .watchhub.collapsed #toggleWatch { font-size: 0; }
+  .watchhub.collapsed #toggleWatch::after { font-size: 13px; }
+  .watchpages { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
+  .watchpages button { min-width: 155px; grid-template-columns: 1fr; align-items: start; }
+  .watchlist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 610px) {
+  main { padding-left: 14px; padding-right: 14px; }
+  .workspace { margin-top: 12px; }
+  .watchhub { padding: 15px; }
+  .watchtop .sectiontitle p { display: none; }
+  .watchactions { flex-direction: column; }
+  .watchheading { margin-top: 16px; }
+  .watchlist button { padding: 10px; }
+  .watchlist small { font-size: 10px; }
+  .watcheditor { padding: 16px; }
+  .editorpagehead { grid-template-columns: 1fr; }
+  .deletepage { justify-self: start; }
+  .editorbar { bottom: -16px; }
+  .editorspacer { display: none; }
+  .editorbar button { flex: 1 1 auto; }
+}

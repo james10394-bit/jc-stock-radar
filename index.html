@@ -11,7 +11,7 @@
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE FLOW · v2.3.0 公開方法模型版</small></div></div>
+  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE FLOW · v2.4.0 自選編輯版</small></div></div>
   <a href="https://www.twse.com.tw/" target="_blank" rel="noopener">官方資料：臺灣證券交易所 ↗</a>
 </header>
 <main>
@@ -24,15 +24,22 @@
     <label>法人統計期間<select id="period"><option value="5">最近5日</option><option value="10">最近10日</option><option value="20" selected>最近20日</option></select></label>
     <button id="refresh">重新讀取</button>
   </div>
-  <section class="watchhub">
-    <div class="sectiontitle"><div class="eyebrow">五大自選分類</div><h2>我的股票觀察室</h2><p>每頁最多 10 支股票，頁名與內容由 GitHub 檔案統一管理。</p></div>
-    <div id="watchPages" class="watchpages"></div>
-    <div class="watchheading"><div><h3 id="watchTitle">我的自選股</h3><p id="watchSubtitle">讀取清單中…</p></div><span>點選股票立即分析</span></div>
-    <div id="watchlist" class="watchlist"></div>
-  </section>
-  <div id="status" role="status"></div>
+  <div class="workspace">
+    <aside class="watchhub" id="watchHub">
+      <div class="watchtop">
+        <div class="sectiontitle"><div class="eyebrow">自選焦點</div><h2>股票觀察室</h2><p>分類與個股可自由新增、刪除。</p></div>
+        <div class="watchactions"><button id="editWatch" type="button">編輯</button><button id="toggleWatch" type="button" aria-expanded="true" aria-controls="watchBody">收合</button></div>
+      </div>
+      <div class="watchbody" id="watchBody">
+        <div id="watchPages" class="watchpages"></div>
+        <div class="watchheading"><div><h3 id="watchTitle">我的自選股</h3><p id="watchSubtitle">讀取清單中…</p></div><span>點選股票立即分析</span></div>
+        <div id="watchlist" class="watchlist"></div>
+      </div>
+    </aside>
+    <div class="analysiscol">
+      <div id="status" role="status"></div>
 
-  <section class="grid" id="content" hidden>
+      <section class="grid" id="content" hidden>
     <div class="heading"><div><div class="eyebrow">個股完整診斷</div><h2 id="title">—</h2></div><span id="dateBadge" class="pill"></span></div>
     <div class="sectiontitle blocktitle"><div class="eyebrow">法人核心數字</div><h2>法人籌碼總覽</h2></div>
     <div class="metrics five">
@@ -112,8 +119,25 @@
       <div class="panelhead"><div><h3>外資買賣超排行</h3><p>最新交易日 · 單位：張</p></div><div class="tabs"><button class="active" data-rank="buy">買超</button><button data-rank="sell">賣超</button></div></div>
       <div class="scroll"><table><thead><tr><th>名次</th><th>股票</th><th>外資買賣超</th><th>收盤價</th></tr></thead><tbody id="ranking"></tbody></table></div>
     </div>
-  </section>
+      </section>
+    </div>
+  </div>
 </main>
+<dialog id="watchEditor" class="watcheditor">
+  <div class="editorhead"><div><div class="eyebrow">自選設定</div><h2>編輯股票觀察室</h2></div><button id="closeEditor" class="iconbutton" type="button" aria-label="關閉">×</button></div>
+  <p class="editorhelp">最多 10 個分類、每類最多 10 支上市股票。設定會保存在這台裝置的瀏覽器。</p>
+  <div id="editorPages" class="editorpages"></div>
+  <div class="editorbar">
+    <button id="addWatchPage" type="button">＋ 新增大標題</button>
+    <button id="exportWatch" type="button">匯出設定</button>
+    <button id="importWatch" type="button">匯入設定</button>
+    <button id="resetWatch" type="button" class="dangerbutton">恢復預設</button>
+    <span class="editorspacer"></span>
+    <button id="cancelWatch" type="button">取消</button>
+    <button id="saveWatch" type="button" class="primarybutton">儲存變更</button>
+  </div>
+  <input id="importWatchFile" type="file" accept="application/json,.json" hidden>
+</dialog>
 <footer>
   資料取自臺灣證券交易所公開盤後資料及公開市場／新聞摘要。所有比例均為固定公式評分，不代表上漲機率或獲利保證，僅供研究參考，不構成投資建議。<br>
   <a href="https://www.twse.com.tw/zh/trading/foreign/t86.html">三大法人</a> · <a href="https://www.twse.com.tw/zh/trading/historical/bwibbu-day.html">本益比</a> · <a href="https://www.twse.com.tw/zh/trading/historical/stock-day.html">個股日成交</a>
