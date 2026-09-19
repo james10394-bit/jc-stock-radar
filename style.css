@@ -524,16 +524,21 @@ footer {
   .watchheading > span { display: block; margin-top: 7px; }
 }
 
-.ratio { min-width: 112px; text-align: right; font-size: 11px; white-space: nowrap; }
-.ratio b { color: var(--red); margin-right: 8px; }
-.ratio span { color: var(--mint); }
-.indicatoritem { position: relative; padding-right: 126px !important; }
+.ratio { min-width: 154px; text-align: center; font-size: 11px; white-space: nowrap; padding: 7px 9px; border: 1px solid transparent; border-radius: 9px; }
+.ratio em { color: #fff; font-style: normal; font-weight: 800; margin-right: 8px; }
+.ratio b { color: #fff; margin-right: 8px; }
+.ratio span { color: #fff; }
+.ratio.bias-bull { background: #8f2835; border-color: #ef6674; }
+.ratio.bias-bear { background: #17634f; border-color: #45cda8; }
+.ratio.bias-neutral { background: #80631c; border-color: #e4bd58; }
+.indicatoritem { position: relative; padding-right: 170px !important; }
 .indicatoritem > span:nth-child(2) { position: absolute; right: 0; top: 15px; }
 .indicatoritem strong { font-size: 15px; }
 .globalrow { grid-template-columns: .9fr 1.1fr; }
 .globalindicators { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
 .globalindicators > div, .holiday { display: flex; justify-content: space-between; gap: 10px; padding: 13px; border: 1px solid #2c425a; border-radius: 10px; background: #0c1929; }
 .globalindicators span, .holiday span { color: var(--muted); font-size: 12px; }
+.globalindicators span small { display: block; margin-top: 5px; color: #6f8aa4; font-size: 10px; }
 .holiday { display: grid; margin-top: 10px; }
 .holiday strong { color: #efc96f; font-size: 13px; }
 .holiday strong > div { display: grid; grid-template-columns: 48px 1fr auto; gap: 8px; padding: 8px 0; border-top: 1px solid #273950; }
@@ -547,11 +552,12 @@ footer {
 .riskcard > span { color: var(--muted); font-size: 11px; }
 .riskcard > strong { font-size: 20px; }
 .riskcard > small { grid-column: 1 / -1; color: #91a8c0; line-height: 1.45; }
-.riskcard.risk-high { border-color: #984b55; background: #311b27; }
-.riskcard.risk-high > strong { color: #ff7b87; }
+.riskcard.risk-high { border-color: #32816e; background: #16463d; }
+.riskcard.risk-high > strong { color: #69e4c1; }
 .riskcard.risk-mid { border-color: #8b7040; background: #2b251b; }
 .riskcard.risk-mid > strong { color: #efc96f; }
-.riskcard.risk-low > strong { color: #69e4c1; }
+.riskcard.risk-low { border-color: #984b55; background: #311b27; }
+.riskcard.risk-low > strong { color: #ff8b96; }
 .newslist { list-style: none; padding: 0; margin: 0; max-height: 360px; overflow: auto; }
 .newslist li { display: grid; grid-template-columns: 76px 1fr 38px; align-items: start; gap: 9px; padding: 11px 3px; border-bottom: 1px solid #273950; font-size: 12px; }
 .newslist li > span { color: #77e0c5; }
@@ -570,3 +576,30 @@ footer {
   .holiday strong > div { grid-template-columns: 46px 1fr; }
   .holiday strong em { grid-column: 2; }
 }
+
+/* Taiwan market convention: bullish red, bearish green, neutral yellow. */
+.signal.bull { border-color: #a84b58; background: linear-gradient(110deg, #55202c, #231827); }
+.signal.bull strong { color: #ff8b96; }
+.signal.bear { border-color: #32816e; background: linear-gradient(110deg, #16463d, #0e2527); }
+.signal.bear strong { color: #69e4c1; }
+.signal.neutral { border-color: #89703b; background: linear-gradient(110deg, #3c321c, #18202b); }
+.signal.neutral strong { color: #efc96f; }
+
+.advisorpanel { border-color: #66563a; background: linear-gradient(145deg, #24241f, #111d2d); }
+.advisorfactors { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+.advisorfactor { min-height: 92px; padding: 14px; border: 1px solid #344b63; border-radius: 11px; background: #0c1929; }
+.advisorfactor span { display: block; color: #8fa7bd; font-size: 11px; margin-bottom: 9px; }
+.advisorfactor strong { display: block; font-size: 13px; line-height: 1.55; }
+.advisorfactor.bull { border-color: #984b55; background: #311b27; }
+.advisorfactor.bull strong { color: #ff929c; }
+.advisorfactor.bear { border-color: #32816e; background: #164039; }
+.advisorfactor.bear strong { color: #69e4c1; }
+.advisorfactor.neutral { border-color: #806b3d; background: #322b1b; }
+.advisorfactor.neutral strong { color: #efc96f; }
+.advisornote { display: grid; grid-template-columns: 70px 1fr auto; gap: 12px; align-items: center; margin-top: 13px; padding: 13px 15px; border-radius: 10px; background: #0b1726; }
+.advisornote span { color: #efc96f; font-size: 12px; font-weight: 800; }
+.advisornote p { font-size: 12px; }
+.advisornote a { color: #77e0c5; text-decoration: none; font-size: 12px; white-space: nowrap; }
+.advisor-empty { color: var(--muted); font-size: 13px; }
+@media (max-width: 850px) { .advisorfactors { grid-template-columns: repeat(2, 1fr); } .advisornote { grid-template-columns: 1fr; } }
+@media (max-width: 610px) { .advisorfactors { grid-template-columns: 1fr; } }

@@ -223,11 +223,25 @@ def market_indicator(symbol, name):
         'range': '10d', 'interval': '1d', 'events': 'history'
     })
     result = payload['chart']['result'][0]
+    meta = result.get('meta') or {}
     closes = [x for x in result['indicators']['quote'][0]['close'] if x is not None]
-    if len(closes) < 2:
+    price = number(meta.get('regularMarketPrice')) or (closes[-1] if closes else None)
+    previous = number(meta.get('chartPreviousClose')) or (closes[-2] if len(closes) >= 2 else None)
+    if price is None or previous in (None, 0):
         raise ValueError(f'{name} data unavailable')
-    change = (closes[-1] / closes[-2] - 1) * 100
-    return {'name': name, 'symbol': symbol, 'close': round(closes[-1], 2), 'change_pct': round(change, 2)}
+    change = (price / previous - 1) * 100
+    now_ts = int(dt.datetime.now(dt.timezone.utc).timestamp())
+    periods = meta.get('currentTradingPeriod') or {}
+    state = 'CLOSED'
+    for key, label_name in [('pre', 'PRE'), ('regular', 'REGULAR'), ('post', 'POST')]:
+        period = periods.get(key) or {}
+        if period.get('start', 0) <= now_ts <= period.get('end', -1):
+            state = label_name
+            break
+    quote_time = number(meta.get('regularMarketTime'))
+    asof = dt.datetime.fromtimestamp(quote_time, TAIPEI).isoformat(timespec='minutes') if quote_time else None
+    return {'name': name, 'symbol': symbol, 'close': round(price, 2), 'previous_close': round(previous, 2),
+            'change_pct': round(change, 2), 'market_state': state, 'asof': asof}
 
 
 def news_score(title):
@@ -467,7 +481,7 @@ def main():
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.1.1',
+        'version': '2.3.0',
         'days': {key: days[key] for key in sorted(days)[-100:]},
         'price_history': histories,
         'all_price_sessions': sorted(price_sessions)[-80:],
