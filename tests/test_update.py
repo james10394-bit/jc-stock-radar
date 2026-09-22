@@ -50,11 +50,14 @@ class TestTWSE(unittest.TestCase):
         self.assertTrue(all(len(page['codes']) <= 10 for page in pages))
 
     def test_company_profiles(self):
-        rows = [{'公司代號': '2330', '公司簡稱': '台積電', '產業別': '24'},
+        rows = [{'公司代號': '2330', '公司名稱': '台灣積體電路製造股份有限公司', '公司簡稱': '台積電', '產業別': '24',
+                 '董事長': '魏哲家', '上市日期': '19940905', '實收資本額': '259323700670', '網址': 'https://www.tsmc.com'},
                 {'公司代號': '1101', '公司簡稱': '台泥', '產業別': '01'}]
         profiles = update.company_profiles(rows)
         self.assertEqual(profiles['2330']['industry'], '半導體業')
         self.assertIn('晶圓代工', profiles['2330']['business'])
+        self.assertEqual(profiles['2330']['listed'], '1994-09-05')
+        self.assertEqual(profiles['2330']['chairman'], '魏哲家')
         self.assertIn('水泥', profiles['1101']['business'])
 
     def test_news_keyword_scoring(self):

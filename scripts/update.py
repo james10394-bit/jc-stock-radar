@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build a dated TWSE snapshot for the static GitHub Pages dashboard."""
 import datetime as dt
+import concurrent.futures
 import json
 import os
 import re
@@ -75,7 +76,7 @@ BUSINESS_OVERRIDES = {
     '2454': '手機與通訊晶片設計', '2308': '電源管理、工業自動化與資料中心設備',
     '2382': '電腦、伺服器與雲端設備製造', '2412': '行動通訊、固網與網路服務',
     '6505': '石化、塑膠原料與能源相關業務', '2603': '國際貨櫃海運與物流',
-    '2609': '國際貨櫃海運與碼頭物流', '2615': '散裝航運與船舶運輸',
+    '2609': '國際貨櫃海運與碼頭物流', '2615': '國際貨櫃海運與物流服務',
     '2605': '散裝航運與船舶代理', '2606': '貨櫃海運與物流服務',
     '2612': '港埠、貨櫃碼頭與物流服務', '2618': '航空客貨運與航空服務',
     '2637': '散裝航運與船舶運輸', '2303': '晶圓代工與半導體製造',
@@ -212,8 +213,16 @@ def company_profiles(payload):
         industry, generic = INDUSTRY_BUSINESS.get(industry_code, ('其他業', '多元產品製造或專業服務'))
         result[code] = {
             'name': str(row.get('公司簡稱') or row.get('公司名稱') or '').strip(),
+            'full_name': str(row.get('公司名稱') or '').strip(),
             'industry': industry,
             'business': BUSINESS_OVERRIDES.get(code, generic),
+            'chairman': str(row.get('董事長') or '').strip(),
+            'general_manager': str(row.get('總經理') or '').strip(),
+            'established': date_string(row.get('成立日期')),
+            'listed': date_string(row.get('上市日期')),
+            'capital': number(row.get('實收資本額')),
+            'website': str(row.get('網址') or '').strip(),
+            'address': str(row.get('住址') or '').strip(),
         }
     if not result:
         raise ValueError('No company profiles returned by TWSE OpenAPI')
@@ -521,6 +530,56 @@ def fetch_global_context(now):
             'method': '美股指數日變動、VIX、美台假日、全球戰爭與台海新聞關鍵字之規則式評分'}
 
 
+def fetch_stock_news(codes, profiles, stocks, now, previous=None):
+    """Fetch compact Google News RSS snapshots for configured watchlist stocks."""
+    result = dict(previous or {})
+    unique_codes = list(dict.fromkeys(codes))[:50]
+
+    def fetch_one(code):
+        profile = profiles.get(code) or {}
+        stock = stocks.get(code) or {}
+        name = str(stock.get('name') or profile.get('name') or code).strip()
+        try:
+            query = f'"{name}" {code} 股票 when:3d'
+            url = GOOGLE_NEWS + '?' + urllib.parse.urlencode({
+                'q': query, 'hl': 'zh-TW', 'gl': 'TW', 'ceid': 'TW:zh-Hant'
+            })
+            request = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 TWSE-Flow/2.4.3'})
+            with urllib.request.urlopen(request, timeout=15) as response:
+                root = ET.fromstring(response.read())
+            items, seen = [], set()
+            for item in root.findall('./channel/item'):
+                title = (item.findtext('title') or '').strip()
+                link = (item.findtext('link') or '').strip()
+                if not title or title in seen:
+                    continue
+                seen.add(title)
+                items.append({'title': title, 'url': link, 'published': item.findtext('pubDate') or ''})
+                if len(items) >= 5:
+                    break
+            return code, {'updated_at': now.isoformat(timespec='seconds'), 'items': items}, None
+        except Exception as exc:
+            return code, None, f'{code} {name} news: {exc}'
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+        for code, snapshot, error in pool.map(fetch_one, unique_codes):
+            if snapshot is not None:
+                result[code] = snapshot
+            elif error:
+                print(error)
+    return result
+
+
+def is_recent_timestamp(value, now, minutes=60):
+    try:
+        stamp = dt.datetime.fromisoformat(str(value))
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=TAIPEI)
+        return dt.timedelta(0) <= now - stamp < dt.timedelta(minutes=minutes)
+    except (TypeError, ValueError):
+        return False
+
+
 def load_watchlist():
     raw = json.loads(WATCHLIST.read_text(encoding='utf-8')) if WATCHLIST.exists() else {}
     pages = raw.get('pages')
@@ -602,6 +661,16 @@ def main():
     except Exception as exc:
         print(f'Global context unavailable: {exc}')
         global_context = old.get('global_context', {})
+    stock_news = old.get('stock_news', {})
+    stock_news_updated_at = old.get('stock_news_updated_at')
+    if not stock_news or not is_recent_timestamp(stock_news_updated_at, now):
+        news_codes = [code for page in watchlist_pages for code in page.get('codes', [])]
+        try:
+            stock_news = fetch_stock_news(news_codes, profiles, days.get(latest, {}), now, stock_news)
+            stock_news_updated_at = now.isoformat(timespec='seconds')
+            changed = True
+        except Exception as exc:
+            print(f'Stock news unavailable: {exc}')
     # A single dated MI_INDEX request contains daily OHLC for the whole listed
     # market. This avoids one request per stock and lets every listed security
     # receive KD/Bollinger/support-resistance data after 20 saved sessions.
@@ -627,7 +696,7 @@ def main():
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.4.2',
+        'version': '2.4.3',
         'days': {key: days[key] for key in sorted(days)[-100:]},
         'price_history': histories,
         'all_price_sessions': sorted(price_sessions)[-80:],
@@ -635,6 +704,8 @@ def main():
         'company_profiles': profiles,
         'night_futures': night_futures,
         'global_context': global_context,
+        'stock_news': stock_news,
+        'stock_news_updated_at': stock_news_updated_at,
         'updated_at': now.isoformat(timespec='seconds'),
         'latest_session': max(days),
     })

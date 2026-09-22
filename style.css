@@ -807,3 +807,50 @@ footer {
   .nightstats, .industrystats { grid-template-columns: 1fr; }
   .mastergrid { grid-template-columns: 1fr; }
 }
+
+/* v2.4.3 — keep the stock title left; use the marked center/right space. */
+.stockheading {
+  display: grid;
+  grid-template-columns: minmax(145px, .55fr) minmax(420px, 1.75fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+.stockidentity { padding-top: 8px; }
+.stockquick {
+  display: grid;
+  grid-template-columns: .9fr 1.1fr;
+  min-width: 0;
+  border: 1px solid #334e69;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(145deg, #12253c, #0c1929);
+}
+.quickcompany, .quicknews { min-width: 0; padding: 13px 14px; }
+.quicknews { border-left: 1px solid #2d445d; }
+.quicktitle { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 7px; }
+.quicktitle span { color: #70e2c2; font-size: 11px; font-weight: 800; letter-spacing: 1px; }
+.quicktitle a { color: #8db4d0; font-size: 10px; text-decoration: none; white-space: nowrap; }
+.quicktitle a:hover { color: #fff; }
+.quickcompany > strong { display: block; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+.quickcompany > p { margin: 5px 0 8px; color: #b6c8d9; font-size: 11px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.companyfacts { display: flex; flex-wrap: wrap; gap: 5px; }
+.companyfacts span { color: #9fb4c9; background: #0a1726; border: 1px solid #2b425a; border-radius: 20px; padding: 4px 7px; font-size: 9px; }
+.stocknews { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.stocknews li { min-width: 0; display: grid; grid-template-columns: 1fr auto; gap: 7px; align-items: start; }
+.stocknews a { min-width: 0; color: #d3e0ec; text-decoration: none; font-size: 11px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stocknews a:hover { color: #fff; text-decoration: underline; }
+.stocknews time, .stocknews li > span { color: #738da7; font-size: 9px; white-space: nowrap; }
+.stockheading .datechooser { padding-top: 8px; }
+@media (max-width: 1180px) {
+  .stockheading { grid-template-columns: 1fr auto; grid-template-areas: "identity date" "quick quick"; }
+  .stockidentity { grid-area: identity; }
+  .stockquick { grid-area: quick; }
+  .stockheading .datechooser { grid-area: date; }
+}
+@media (max-width: 610px) {
+  .stockheading { grid-template-columns: 1fr; grid-template-areas: "identity" "date" "quick"; }
+  .stockheading .datechooser { justify-self: stretch; }
+  .stockheading .datechooser select { max-width: none; width: 100%; }
+  .stockquick { grid-template-columns: 1fr; }
+  .quicknews { border-left: 0; border-top: 1px solid #2d445d; }
+}

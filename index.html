@@ -7,11 +7,11 @@
   <meta name="description" content="整合臺灣證券交易所三大法人、KD、布林通道、均線與支撐壓力的台股研究工具。">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2312b89a'/%3E%3Cpath d='M12 42l12-13 9 8 19-22v12L34 48l-10-9-12 13z' fill='white'/%3E%3C/svg%3E">
   <title>台股法人技術分析站</title>
-  <link rel="stylesheet" href="style.css?v=2.4.2">
+  <link rel="stylesheet" href="style.css?v=2.4.3">
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE FLOW · v2.4.2 夜盤與產業模型版</small></div></div>
+  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE FLOW · v2.4.3 公司資訊與個股新聞版</small></div></div>
   <a href="https://www.twse.com.tw/" target="_blank" rel="noopener">官方資料：臺灣證券交易所 ↗</a>
 </header>
 <main>
@@ -40,7 +40,22 @@
       <div id="status" role="status"></div>
 
       <section class="grid" id="content" hidden>
-    <div class="heading"><div><div class="eyebrow">個股完整診斷</div><h2 id="title">—</h2></div><label class="datechooser">法人資料日期<select id="institutionDate" aria-label="選擇法人資料日期"></select><span id="dateBadge" hidden></span></label></div>
+    <div class="heading stockheading">
+      <div class="stockidentity"><div class="eyebrow">個股完整診斷</div><h2 id="title">—</h2></div>
+      <section class="stockquick" aria-label="個股公司資訊與即時新聞">
+        <div class="quickcompany">
+          <div class="quicktitle"><span>公司簡介</span><a id="companyWebsite" target="_blank" rel="noopener">官方網站 ↗</a></div>
+          <strong id="companyFullName">公司資料讀取中…</strong>
+          <p id="companySummary">—</p>
+          <div id="companyFacts" class="companyfacts"></div>
+        </div>
+        <div class="quicknews">
+          <div class="quicktitle"><span>個股即時新聞</span><a id="stockNewsSearch" target="_blank" rel="noopener">更多新聞 ↗</a></div>
+          <ul id="stockNews" class="stocknews"><li>新聞讀取中…</li></ul>
+        </div>
+      </section>
+      <label class="datechooser">法人資料日期<select id="institutionDate" aria-label="選擇法人資料日期"></select><span id="dateBadge" hidden></span></label>
+    </div>
     <div class="sectiontitle blocktitle"><div class="eyebrow">法人核心數字</div><h2>法人籌碼總覽</h2></div>
     <div class="metrics five">
       <article class="card accent"><span>外資當日買賣超</span><strong id="foreignToday">—</strong><div id="foreignSub" class="sub"></div></article>
@@ -166,6 +181,6 @@
   資料取自臺灣證券交易所公開盤後資料及公開市場／新聞摘要。所有比例均為固定公式評分，不代表上漲機率或獲利保證，僅供研究參考，不構成投資建議。<br>
   <a href="https://www.twse.com.tw/zh/trading/foreign/t86.html">三大法人</a> · <a href="https://www.twse.com.tw/zh/trading/historical/bwibbu-day.html">本益比</a> · <a href="https://www.twse.com.tw/zh/trading/historical/stock-day.html">個股日成交</a> · <a href="https://www.taifex.com.tw/cht/4/aHIntroduction">臺股期貨夜盤</a>
 </footer>
-<script src="app.js?v=2.4.2" defer></script>
+<script src="app.js?v=2.4.3" defer></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-/* TWSE Flow v2.4.2 — night futures, industry breadth and public-principles models. */
+/* TWSE Flow v2.4.3 — company quick facts and per-stock news. */
 const $ = id => document.getElementById(id);
 let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0, institutionDate = null;
 let watchPagesData = [], editingPages = [];
@@ -224,6 +224,25 @@ function renderWatchlist(){
     return '<button data-watch="'+escape(code)+'" class="'+(code===selected?'active':'')+'"><span class="watchcode">'+escape(code)+'</span><strong>'+escape(stock?.name||profile.name||'尚無名稱')+'</strong><small class="watchbusiness">'+escape(business)+'</small><small>'+(Number.isFinite(price)?fmt(price)+' 元':'等待資料')+(Number.isFinite(net)?' · 外資 '+lots(net):'')+'</small></button>';
   }).join('')||'<div class="editornote">這個分類尚未加入股票，請點「編輯」。</div>';
 }
+function renderStockQuick(code){
+  const profile=market.company_profiles?.[code]||{},stock=latestMarket()[code]||current()[code]||{},name=stock.name||profile.name||code;
+  $('companyFullName').textContent=profile.full_name||profile.name||name;
+  $('companySummary').textContent=(profile.industry?profile.industry+'｜':'')+(profile.business||'公司主要業務資料更新中');
+  const facts=[];
+  if(profile.listed)facts.push('上市 '+profile.listed);
+  if(profile.chairman)facts.push('董事長 '+profile.chairman);
+  if(Number.isFinite(Number(profile.capital)))facts.push('資本額 '+fmt(Number(profile.capital)/100000000,1)+' 億');
+  $('companyFacts').innerHTML=facts.slice(0,3).map(x=>'<span>'+escape(x)+'</span>').join('');
+  const website=$('companyWebsite');
+  if(profile.website){website.href=/^https?:\/\//i.test(profile.website)?profile.website:'https://'+profile.website;website.hidden=false;}else{website.removeAttribute('href');website.hidden=true;}
+  const searchUrl='https://news.google.com/search?q='+encodeURIComponent(code+' '+name+' 股票')+'&hl=zh-TW&gl=TW&ceid=TW:zh-Hant';
+  $('stockNewsSearch').href=searchUrl;
+  const cache=market.stock_news?.[code],items=Array.isArray(cache)?cache:(cache?.items||[]);
+  $('stockNews').innerHTML=items.length?items.slice(0,3).map(item=>{
+    const parsed=Date.parse(item.published||''),stamp=Number.isFinite(parsed)?new Intl.DateTimeFormat('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(parsed)):'最新';
+    return '<li><a href="'+escape(item.url||searchUrl)+'" target="_blank" rel="noopener" title="'+escape(item.title)+'">'+escape(item.title)+'</a><time>'+escape(stamp)+'</time></li>';
+  }).join(''):'<li><a href="'+escape(searchUrl)+'" target="_blank" rel="noopener">目前沒有快取新聞，點此搜尋 '+escape(name)+' 最新消息</a><span>搜尋</span></li>';
+}
 function renderWatchEditor(){
   $('editorPages').innerHTML=editingPages.map((page,i)=>{
     const chips=page.codes.map(code=>'<span class="editorchip"><b>'+escape(code)+'</b><span>'+escape(current()[code]?.name||'查無上市資料')+'</span><button type="button" data-remove-code="'+escape(code)+'" aria-label="刪除 '+escape(code)+'">×</button></span>').join('');
@@ -284,7 +303,7 @@ function rank(){
 function render(){
   if(!market)return; const stock=current()[selected],latestStock=latestMarket()[selected]||stock;
   if(!stock){$('content').hidden=true;$('status').textContent='找不到這個上市股票代號。';return;}
-  $('status').textContent='';$('content').hidden=false;$('title').textContent=selected+' · '+(latestStock.name||stock.name);
+  $('status').textContent='';$('content').hidden=false;$('title').textContent=selected+' · '+(latestStock.name||stock.name);renderStockQuick(selected);
   const f=stock.foreign,period=Number($('period').value),allFlows=flows(selected),availableFlows=allFlows.filter(x=>x.date<=(institutionDate||market.latest_session)),periodRows=availableFlows.slice(-period);
   setValue('foreignToday',lots(f.net),f.net);$('foreignSub').textContent='買進 '+lots(f.buy).replace('+','')+' ｜ 賣出 '+lots(f.sell).replace('+','');
   setValue('foreignPeriod',lots(sumNet(periodRows)),sumNet(periodRows));setValue('trustPeriod',lots(sumNet(periodRows,'trust')),sumNet(periodRows,'trust'));setValue('dealerPeriod',lots(sumNet(periodRows,'dealer')),sumNet(periodRows,'dealer'));
@@ -300,7 +319,7 @@ function render(){
 
 async function load(){
   $('status').textContent='正在載入證交所盤後資料…';
-  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.4.2');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
+  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.4.3');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
   catch(e){if($('stamp'))$('stamp').textContent='尚未取得資料';if($('content'))$('content').hidden=true;if($('status'))$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
 }
 
