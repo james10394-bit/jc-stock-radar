@@ -1,4 +1,4 @@
-/* TWSE + TPEx Flow v2.4.6 — MACD crossover, momentum and divergence analysis. */
+/* TWSE + TPEx Flow v2.4.7 — full adaptive stock-name display. */
 const $ = id => document.getElementById(id);
 let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0, institutionDate = null;
 let watchPagesData = [], editingPages = [];
@@ -368,8 +368,10 @@ function render(){
   if(!stock){$('content').hidden=true;$('status').textContent='找不到這個上市股票代號。';return;}
   $('status').textContent='';$('content').hidden=false;
   const stockTitle=$('title'),stockName=latestStock.name||stock.name;
+  const stockNameLength=Array.from(stockName).length;
+  const stockNameSize=stockNameLength<=5?'name-short':stockNameLength<=8?'name-medium':stockNameLength<=12?'name-long':'name-xlong';
   stockTitle.setAttribute('aria-label',selected+' '+stockName);
-  stockTitle.innerHTML='<span class="stocktitle-code">'+escape(selected)+'</span><span class="stocktitle-name">'+escape(stockName)+'</span>';
+  stockTitle.innerHTML='<span class="stocktitle-code">'+escape(selected)+'</span><span class="stocktitle-name '+stockNameSize+'" title="'+escape(stockName)+'">'+escape(stockName)+'</span>';
   renderStockQuick(selected);
   const f=stock.foreign,period=Number($('period').value),allFlows=flows(selected),availableFlows=allFlows.filter(x=>x.date<=(institutionDate||market.latest_session)),periodRows=availableFlows.slice(-period);
   setValue('foreignToday',lots(f.net),f.net);$('foreignSub').textContent='買進 '+lots(f.buy).replace('+','')+' ｜ 賣出 '+lots(f.sell).replace('+','');
@@ -386,7 +388,7 @@ function render(){
 
 async function load(){
   $('status').textContent='正在載入證交所盤後資料…';
-  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.4.6');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
+  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.4.7');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
   catch(e){if($('stamp'))$('stamp').textContent='尚未取得資料';if($('content'))$('content').hidden=true;if($('status'))$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
 }
 

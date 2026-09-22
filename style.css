@@ -833,7 +833,7 @@ footer {
 /* v2.4.3 — keep the stock title left; use the marked center/right space. */
 .stockheading {
   display: grid;
-  grid-template-columns: minmax(145px, .55fr) minmax(420px, 1.75fr) auto;
+  grid-template-columns: minmax(225px, .72fr) minmax(390px, 1.65fr) auto;
   gap: 14px;
   align-items: start;
 }
@@ -854,12 +854,15 @@ footer {
 }
 .stocktitle-name {
   color: #dceaf5;
-  font-size: clamp(21px, 2vw, 28px);
   letter-spacing: .5px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
 }
+.stocktitle-name.name-short { font-size: 28px; }
+.stocktitle-name.name-medium { font-size: 22px; }
+.stocktitle-name.name-long { font-size: 18px; }
+.stocktitle-name.name-xlong { font-size: 15px; letter-spacing: 0; }
 .stockquick {
   display: grid;
   grid-template-columns: .9fr 1.1fr;
@@ -899,5 +902,8 @@ footer {
   .quicknews { border-left: 0; border-top: 1px solid #2d445d; }
   .stockidentity h2 { grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 10px; }
   .stocktitle-code { font-size: 28px; }
-  .stocktitle-name { font-size: 24px; }
+  .stocktitle-name.name-short { font-size: 24px; }
+  .stocktitle-name.name-medium { font-size: 19px; }
+  .stocktitle-name.name-long { font-size: 16px; }
+  .stocktitle-name.name-xlong { font-size: 14px; }
 }
