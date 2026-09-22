@@ -324,11 +324,28 @@ tr[data-code]:hover {
 .chart.tech {
   height: 320px;
 }
+.chart.macd { height: 230px; }
 .chart svg {
   width: 100%;
   height: 100%;
   overflow: visible;
 }
+.macdsection { margin-top: 20px; padding-top: 18px; border-top: 1px solid #2d445d; }
+.macdhead { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.macdhead h3 { margin-bottom: 5px; }
+.macdhead p { color: var(--muted); margin: 0; font-size: 11px; }
+.macdlegend { display: flex; gap: 7px; flex-wrap: wrap; justify-content: end; }
+.macdlegend span { padding: 4px 7px; border: 1px solid #334b64; border-radius: 20px; font-size: 9px; }
+.macdlegend .dif { color: #7bd7f0; }
+.macdlegend .dea { color: #efc96f; }
+.macdlegend .hist { color: #ff929c; }
+.macdsignals { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 14px 0 5px; }
+.macdsignal { min-width: 0; padding: 10px 11px; border: 1px solid #334b64; border-radius: 10px; background: #0b1828; }
+.macdsignal span { display: block; color: #8fa8bf; font-size: 9px; letter-spacing: .6px; margin-bottom: 5px; }
+.macdsignal strong { display: block; font-size: 11px; line-height: 1.45; }
+.macdsignal.bull strong { color: var(--red); }
+.macdsignal.bear strong { color: var(--mint); }
+.macdsignal.neutral strong { color: #efc96f; }
 .signal {
   display: grid;
   grid-template-columns: 170px 1fr;
@@ -484,6 +501,10 @@ footer {
   .chart.tech {
     height: 250px;
   }
+  .chart.macd { height: 210px; }
+  .macdhead { display: block; }
+  .macdlegend { justify-content: start; margin-top: 9px; }
+  .macdsignals { grid-template-columns: 1fr; }
 }
 
 /* v2.4.1 — institution date picker and company business summary */

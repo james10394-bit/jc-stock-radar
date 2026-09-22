@@ -1,4 +1,4 @@
-/* TWSE + TPEx Flow v2.4.5 — listed and OTC stocks in one dashboard. */
+/* TWSE + TPEx Flow v2.4.6 — MACD crossover, momentum and divergence analysis. */
 const $ = id => document.getElementById(id);
 let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0, institutionDate = null;
 let watchPagesData = [], editingPages = [];
@@ -32,6 +32,45 @@ function indicators(rows){
   return {ma5,ma10,ma20,upper:ma20+2*sd,middle:ma20,lower:ma20-2*sd,k,d};
 }
 
+function emaSeries(values,period){
+  if(!values.length)return [];
+  const alpha=2/(period+1),result=[values[0]];
+  for(let i=1;i<values.length;i++)result.push(values[i]*alpha+result[i-1]*(1-alpha));
+  return result;
+}
+
+function macdAnalysis(rows){
+  if(rows.length<26)return null;
+  const closes=rows.map(x=>x.close),ema12=emaSeries(closes,12),ema26=emaSeries(closes,26);
+  const dif=closes.map((_,i)=>ema12[i]-ema26[i]),dea=emaSeries(dif,9),hist=dif.map((v,i)=>(v-dea[i])*2);
+  const i=rows.length-1,j=i-1,currentDif=dif[i],currentDea=dea[i],currentHist=hist[i],priorHist=hist[j];
+  let cross,crossState;
+  if(dif[j]<=dea[j]&&currentDif>currentDea){cross='黃金交叉';crossState='bull';}
+  else if(dif[j]>=dea[j]&&currentDif<currentDea){cross='死亡交叉';crossState='bear';}
+  else if(currentDif>=currentDea){cross='DIF 位於訊號線上方';crossState='bull';}
+  else{cross='DIF 位於訊號線下方';crossState='bear';}
+  const expanding=Math.abs(currentHist)>Math.abs(priorHist);
+  let momentum,momentumState;
+  if(currentHist>=0){momentum='多方柱狀體'+(expanding?'放大':'縮小');momentumState=expanding?'bull':'neutral';}
+  else{momentum='空方柱狀體'+(expanding?'放大':'縮小');momentumState=expanding?'bear':'neutral';}
+  let divergence='未出現明確背離',divergenceState='neutral';
+  if(rows.length>=20){
+    const start=rows.length-20,mid=rows.length-10;
+    const older=rows.slice(start,mid),recent=rows.slice(mid);
+    const oldHigh=older.reduce((best,row,k)=>row.close>best.row.close?{row,k:start+k}:best,{row:older[0],k:start});
+    const newHigh=recent.reduce((best,row,k)=>row.close>best.row.close?{row,k:mid+k}:best,{row:recent[0],k:mid});
+    const oldLow=older.reduce((best,row,k)=>row.close<best.row.close?{row,k:start+k}:best,{row:older[0],k:start});
+    const newLow=recent.reduce((best,row,k)=>row.close<best.row.close?{row,k:mid+k}:best,{row:recent[0],k:mid});
+    if(newHigh.row.close>oldHigh.row.close&&dif[newHigh.k]<dif[oldHigh.k]){divergence='頂背離提示：價格創高、DIF 未同步創高';divergenceState='bear';}
+    else if(newLow.row.close<oldLow.row.close&&dif[newLow.k]>dif[oldLow.k]){divergence='底背離提示：價格創低、DIF 未同步創低';divergenceState='bull';}
+  }
+  let score=(currentDif>=currentDea?12:-12)+(currentHist>=0?8:-8);
+  if(expanding)score+=currentHist>=0?8:-8;
+  if(cross==='黃金交叉')score+=18;if(cross==='死亡交叉')score-=18;
+  if(divergenceState==='bull')score+=18;if(divergenceState==='bear')score-=18;
+  return {dif,dea,hist,currentDif,currentDea,currentHist,cross,crossState,momentum,momentumState,divergence,divergenceState,score};
+}
+
 function analyze(rows,flowRows){
   const ind=indicators(rows); if(!ind)return null;
   const quote=last(rows),prior=rows.slice(-21,-1);
@@ -50,7 +89,7 @@ function analyze(rows,flowRows){
   if(quote.close>ind.upper){score--;reasons.push('股價高於布林上軌，追價風險升高');}
   if(ind.k>80)reasons.push('KD進入80以上高檔區');
   if(ind.k<20)reasons.push('KD進入20以下低檔區');
-  return {ind,quote,rawSupport,rawResistance,buyLow,buyHigh,sellLow,sellHigh,stop,flow5,flow20,score,reasons};
+  return {ind,macd:macdAnalysis(rows),quote,rawSupport,rawResistance,buyLow,buyHigh,sellLow,sellHigh,stop,flow5,flow20,score,reasons};
 }
 
 const ratio = raw => {const buy=Math.round(Math.max(5,Math.min(95,50+raw)));return {buy,sell:100-buy};};
@@ -58,6 +97,7 @@ function adviceRatios(a){
   if(!a)return null;
   const i=a.ind,q=a.quote,band=Math.max(.01,i.upper-i.lower),position=(q.close-i.lower)/band;
   const kd=ratio((i.k-i.d)*1.2+(i.k<20?18:0)-(i.k>80?18:0));
+  const macd=ratio(a.macd?.score||0);
   const boll=ratio((.5-position)*70);
   const above=[i.ma5,i.ma10,i.ma20].filter(x=>q.close>x).length;
   const ma=ratio((above-1.5)*18+(i.ma5>i.ma10&&i.ma10>i.ma20?8:i.ma5<i.ma10&&i.ma10<i.ma20?-8:0));
@@ -66,15 +106,15 @@ function adviceRatios(a){
   const inBuy=q.close>=a.buyLow*.98&&q.close<=a.buyHigh*1.02,inSell=q.close>=a.sellLow;
   const trade=ratio(inBuy?25:inSell?-30:q.close<a.stop?-45:0);
   const globalBuy=Number(market.global_context?.buy_percent)||50;
-  const technical=Math.round((kd.buy+boll.buy+ma.buy+levels.buy+trade.buy)/5);
+  const technical=Math.round((kd.buy+macd.buy+boll.buy+ma.buy+levels.buy+trade.buy)/6);
   const combined=Math.round(technical*.7+globalBuy*.3);
-  return {kd,boll,ma,levels,trade,technical:ratio(technical-50),global:ratio(globalBuy-50),combined:ratio(combined-50)};
+  return {kd,macd,boll,ma,levels,trade,technical:ratio(technical-50),global:ratio(globalBuy-50),combined:ratio(combined-50)};
 }
 function ratioBadge(value){const bias=value.buy>=60?'bias-bull':value.buy<=40?'bias-bear':'bias-neutral';const label=value.buy>=60?'偏多':value.buy<=40?'偏空':'中性';return '<div class="ratio '+bias+'"><em>'+label+'</em><b>買 '+value.buy+'%</b><span>賣 '+value.sell+'%</span></div>';}
 function renderAdvice(a){
-  const r=adviceRatios(a),ids=['kdRatio','bollRatio','maRatio','levelRatio','tradeRatio'];
+  const r=adviceRatios(a),ids=['kdRatio','macdRatio','bollRatio','maRatio','levelRatio','tradeRatio'];
   if(!r){ids.forEach(id=>$(id).innerHTML=ratioBadge({buy:50,sell:50}));$('overallRatio').innerHTML=ratioBadge({buy:50,sell:50});return;}
-  [['kdRatio',r.kd],['bollRatio',r.boll],['maRatio',r.ma],['levelRatio',r.levels],['tradeRatio',r.trade]].forEach(([id,v])=>$(id).innerHTML=ratioBadge(v));
+  [['kdRatio',r.kd],['macdRatio',r.macd],['bollRatio',r.boll],['maRatio',r.ma],['levelRatio',r.levels],['tradeRatio',r.trade]].forEach(([id,v])=>$(id).innerHTML=ratioBadge(v));
   $('overallRatio').innerHTML=ratioBadge(r.combined);
   $('levelValue').textContent='支撐 '+fmt(a.rawSupport)+' · 壓力 '+fmt(a.rawResistance);
   $('tradeValue').textContent='買 '+fmt(a.buyLow)+'～'+fmt(a.buyHigh)+' · 停損 '+fmt(a.stop)+' · 賣 '+fmt(a.sellLow)+'～'+fmt(a.sellHigh);
@@ -285,6 +325,28 @@ function technicalChart(rows,a){
   $('techChart').innerHTML=svg;
 }
 
+function renderMacd(rows,view){
+  if(!view){
+    $('macdSignals').innerHTML='<div class="macdsignal neutral"><span>資料狀態</span><strong>至少需要 26 個交易日</strong></div>';
+    $('macdChart').textContent='MACD 歷史資料仍在累積。';
+    $('macdValue').textContent='資料不足';
+    return;
+  }
+  const signals=[['交叉訊號',view.cross,view.crossState],['柱狀體動能',view.momentum,view.momentumState],['背離偵測',view.divergence,view.divergenceState]];
+  $('macdSignals').innerHTML=signals.map(([label,text,state])=>'<div class="macdsignal '+state+'"><span>'+escape(label)+'</span><strong>'+escape(text)+'</strong></div>').join('');
+  $('macdValue').textContent='DIF '+fmt(view.currentDif,3)+' · DEA '+fmt(view.currentDea,3)+' · 柱 '+fmt(view.currentHist,3);
+  const count=Math.min(60,rows.length),offset=rows.length-count,q=rows.slice(-count);
+  const dif=view.dif.slice(-count),dea=view.dea.slice(-count),hist=view.hist.slice(-count),w=680,h=230,p=38;
+  const all=[0,...dif,...dea,...hist].filter(Number.isFinite),min=Math.min(...all),max=Math.max(...all),span=Math.max(.001,max-min);
+  const x=i=>p+i*(w-2*p)/Math.max(1,count-1),y=v=>h-p-(v-min)/span*(h-2*p),zero=y(0),bw=Math.max(2,(w-2*p)/count*.58);
+  const line=(values,stroke)=>'<polyline fill="none" stroke="'+stroke+'" stroke-width="2" points="'+values.map((v,i)=>x(i)+','+y(v)).join(' ')+'"/>';
+  let svg='<svg viewBox="0 0 '+w+' '+h+'" role="img" aria-label="MACD DIF、DEA與柱狀體走勢圖"><line x1="'+p+'" x2="'+(w-p)+'" y1="'+zero+'" y2="'+zero+'" stroke="#5e748b" stroke-width="1"/>';
+  hist.forEach((v,i)=>{const yy=y(v);svg+='<rect x="'+(x(i)-bw/2)+'" y="'+Math.min(yy,zero)+'" width="'+bw+'" height="'+Math.max(1,Math.abs(zero-yy))+'" rx="1" fill="'+(v>=0?'#ff7581':'#3dd3ad')+'" opacity=".72"><title>'+q[i].date+' 柱狀體 '+fmt(v,3)+'</title></rect>';});
+  svg+=line(dif,'#7bd7f0')+line(dea,'#efc96f');
+  svg+='<text x="'+p+'" y="'+(h-5)+'" fill="#91a7bd" font-size="11">'+q[0].date.slice(5)+'</text><text x="'+(w-p)+'" text-anchor="end" y="'+(h-5)+'" fill="#91a7bd" font-size="11">'+last(q).date.slice(5)+'</text></svg>';
+  $('macdChart').innerHTML=svg;
+}
+
 function renderPlan(a){
   if(!a){$('tradePlan').className='signal neutral';$('tradePlan').innerHTML='<strong>技術資料尚未完整</strong><p>全市場行情正在累積；取得至少20個交易日後將自動產生技術分析。</p>';['buyZone','stopPrice','sellZone'].forEach(id=>$(id).textContent='—');$('levelNote').textContent='每天盤後更新一次，無須把股票加入自選頁才會累積。';return;}
   const state=a.score>=2?['偏多觀察','bull']:a.score<=-2?['偏弱保守','bear']:['區間等待','neutral'];
@@ -319,12 +381,12 @@ function render(){
   $('details').innerHTML=[['外資及陸資',f],['投信',stock.trust],['自營商',stock.dealer]].map(([name,x])=>'<tr><td>'+name+'</td><td>'+lots(x.buy).replace('+','')+'</td><td>'+lots(x.sell).replace('+','')+'</td><td class="'+color(x.net)+'">'+lots(x.net)+'</td></tr>').join('');
   const total=f.buy+f.sell,ratio=Number.isFinite(total)&&total>0?f.buy/total:null;$('gaugeFill').style.width=ratio===null?'0%':(ratio*100).toFixed(1)+'%';$('gaugeText').innerHTML=ratio===null?'買賣分項不足':'<span>買進 '+fmt(ratio*100)+'%</span><span>賣出 '+fmt((1-ratio)*100)+'%</span>';
   $('kd').textContent=a?'K '+fmt(a.ind.k,1)+' / D '+fmt(a.ind.d,1):'—';$('boll').textContent=a?fmt(a.ind.lower)+' / '+fmt(a.ind.middle)+' / '+fmt(a.ind.upper):'—';$('ma').textContent=a?'MA5 '+fmt(a.ind.ma5)+' · MA10 '+fmt(a.ind.ma10)+' · MA20 '+fmt(a.ind.ma20):'—';
-  flowChart(periodRows);technicalChart(priceRows,a);renderPlan(a);renderAdvice(a);renderAdvisor(a,availableFlows);const industry=renderIndustry(selected);renderNight();renderMasters(a,availableFlows,industry);renderGlobal();renderWatchlist();rank();
+  flowChart(periodRows);technicalChart(priceRows,a);renderMacd(priceRows,a?.macd);renderPlan(a);renderAdvice(a);renderAdvisor(a,availableFlows);const industry=renderIndustry(selected);renderNight();renderMasters(a,availableFlows,industry);renderGlobal();renderWatchlist();rank();
 }
 
 async function load(){
   $('status').textContent='正在載入證交所盤後資料…';
-  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.4.5');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
+  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.4.6');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
   catch(e){if($('stamp'))$('stamp').textContent='尚未取得資料';if($('content'))$('content').hidden=true;if($('status'))$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
 }
 

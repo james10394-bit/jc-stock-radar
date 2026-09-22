@@ -7,11 +7,11 @@
   <meta name="description" content="整合上市與上櫃三大法人、KD、布林通道、均線與支撐壓力的台股研究工具。">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2312b89a'/%3E%3Cpath d='M12 42l12-13 9 8 19-22v12L34 48l-10-9-12 13z' fill='white'/%3E%3C/svg%3E">
   <title>台股法人技術分析站</title>
-  <link rel="stylesheet" href="style.css?v=2.4.5">
+  <link rel="stylesheet" href="style.css?v=2.4.6">
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE＋TPEx FLOW · v2.4.5 標題排版優化版</small></div></div>
+  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE＋TPEx FLOW · v2.4.6 MACD 分析版</small></div></div>
   <a href="https://www.twse.com.tw/" target="_blank" rel="noopener">官方資料：臺灣證券交易所 ↗</a>
 </header>
 <main>
@@ -109,10 +109,19 @@
 
     <div class="sectiontitle blocktitle"><div class="eyebrow">日線技術面</div><h2>技術指標與價格趨勢</h2></div>
     <div class="columns techrow nomargin">
-      <article class="panel wide"><div class="panelhead"><div><h3>價格、布林通道與支撐壓力</h3><p>藍線收盤價 · 紫線布林上下軌 · 黃線20日均線</p></div></div><div id="techChart" class="chart tech"></div></article>
+      <article class="panel wide">
+        <div class="panelhead"><div><h3>價格、布林通道與支撐壓力</h3><p>藍線收盤價 · 紫線布林上下軌 · 黃線20日均線</p></div></div>
+        <div id="techChart" class="chart tech"></div>
+        <div class="macdsection">
+          <div class="macdhead"><div><h3>MACD（12,26,9）</h3><p>DIF 快線 · DEA 訊號線 · 多空柱狀體</p></div><div class="macdlegend"><span class="dif">DIF</span><span class="dea">DEA</span><span class="hist">柱狀體</span></div></div>
+          <div id="macdSignals" class="macdsignals"></div>
+          <div id="macdChart" class="chart macd"></div>
+        </div>
+      </article>
       <article class="panel indicators">
         <h3>各項指標買賣比例</h3>
         <div class="indicatoritem"><span>KD（9,3,3）</span><span id="kdRatio"></span><strong id="kd">—</strong></div>
+        <div class="indicatoritem"><span>MACD（12,26,9）</span><span id="macdRatio"></span><strong id="macdValue">—</strong></div>
         <div class="indicatoritem"><span>布林 下／中／上</span><span id="bollRatio"></span><strong id="boll">—</strong></div>
         <div class="indicatoritem"><span>MA5／MA10／MA20</span><span id="maRatio"></span><strong id="ma">—</strong></div>
         <div class="indicatoritem"><span>支撐與壓力</span><span id="levelRatio"></span><strong id="levelValue">—</strong></div>
@@ -181,6 +190,6 @@
   資料取自臺灣證券交易所、證券櫃檯買賣中心公開盤後資料及公開市場／新聞摘要。所有比例均為固定公式評分，不代表上漲機率或獲利保證，僅供研究參考，不構成投資建議。<br>
   <a href="https://www.twse.com.tw/zh/trading/foreign/t86.html">上市三大法人</a> · <a href="https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html">上櫃三大法人</a> · <a href="https://www.twse.com.tw/zh/trading/historical/bwibbu-day.html">本益比</a> · <a href="https://www.taifex.com.tw/cht/4/aHIntroduction">臺股期貨夜盤</a>
 </footer>
-<script src="app.js?v=2.4.5" defer></script>
+<script src="app.js?v=2.4.6" defer></script>
 </body>
 </html>
