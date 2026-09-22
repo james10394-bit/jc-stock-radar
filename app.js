@@ -1,4 +1,4 @@
-/* TWSE Flow v2.4.3 — company quick facts and per-stock news. */
+/* TWSE + TPEx Flow v2.4.5 — listed and OTC stocks in one dashboard. */
 const $ = id => document.getElementById(id);
 let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0, institutionDate = null;
 let watchPagesData = [], editingPages = [];
@@ -229,10 +229,11 @@ function renderStockQuick(code){
   $('companyFullName').textContent=profile.full_name||profile.name||name;
   $('companySummary').textContent=(profile.industry?profile.industry+'｜':'')+(profile.business||'公司主要業務資料更新中');
   const facts=[];
-  if(profile.listed)facts.push('上市 '+profile.listed);
+  if(profile.market||stock.market)facts.push(profile.market||stock.market);
+  if(profile.listed)facts.push((profile.market==='上櫃'?'上櫃 ':'上市 ')+profile.listed);
   if(profile.chairman)facts.push('董事長 '+profile.chairman);
   if(Number.isFinite(Number(profile.capital)))facts.push('資本額 '+fmt(Number(profile.capital)/100000000,1)+' 億');
-  $('companyFacts').innerHTML=facts.slice(0,3).map(x=>'<span>'+escape(x)+'</span>').join('');
+  $('companyFacts').innerHTML=facts.slice(0,4).map(x=>'<span>'+escape(x)+'</span>').join('');
   const website=$('companyWebsite');
   if(profile.website){website.href=/^https?:\/\//i.test(profile.website)?profile.website:'https://'+profile.website;website.hidden=false;}else{website.removeAttribute('href');website.hidden=true;}
   const searchUrl='https://news.google.com/search?q='+encodeURIComponent(code+' '+name+' 股票')+'&hl=zh-TW&gl=TW&ceid=TW:zh-Hant';
@@ -303,7 +304,11 @@ function rank(){
 function render(){
   if(!market)return; const stock=current()[selected],latestStock=latestMarket()[selected]||stock;
   if(!stock){$('content').hidden=true;$('status').textContent='找不到這個上市股票代號。';return;}
-  $('status').textContent='';$('content').hidden=false;$('title').textContent=selected+' · '+(latestStock.name||stock.name);renderStockQuick(selected);
+  $('status').textContent='';$('content').hidden=false;
+  const stockTitle=$('title'),stockName=latestStock.name||stock.name;
+  stockTitle.setAttribute('aria-label',selected+' '+stockName);
+  stockTitle.innerHTML='<span class="stocktitle-code">'+escape(selected)+'</span><span class="stocktitle-name">'+escape(stockName)+'</span>';
+  renderStockQuick(selected);
   const f=stock.foreign,period=Number($('period').value),allFlows=flows(selected),availableFlows=allFlows.filter(x=>x.date<=(institutionDate||market.latest_session)),periodRows=availableFlows.slice(-period);
   setValue('foreignToday',lots(f.net),f.net);$('foreignSub').textContent='買進 '+lots(f.buy).replace('+','')+' ｜ 賣出 '+lots(f.sell).replace('+','');
   setValue('foreignPeriod',lots(sumNet(periodRows)),sumNet(periodRows));setValue('trustPeriod',lots(sumNet(periodRows,'trust')),sumNet(periodRows,'trust'));setValue('dealerPeriod',lots(sumNet(periodRows,'dealer')),sumNet(periodRows,'dealer'));
@@ -319,11 +324,11 @@ function render(){
 
 async function load(){
   $('status').textContent='正在載入證交所盤後資料…';
-  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.4.3');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
+  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.4.5');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
   catch(e){if($('stamp'))$('stamp').textContent='尚未取得資料';if($('content'))$('content').hidden=true;if($('status'))$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
 }
 
-$('search').addEventListener('change',e=>{const term=e.target.value.trim(),list=Object.entries(current());const hit=list.find(([code])=>code===term)||list.find(([code,s])=>code.includes(term)||s.name.includes(term));if(hit){selected=hit[0];e.target.value='';render();}else if(term)$('status').textContent='沒有找到這個上市股票。';});
+$('search').addEventListener('change',e=>{const term=e.target.value.trim(),list=Object.entries(current());const hit=list.find(([code])=>code===term)||list.find(([code,s])=>code.includes(term)||s.name.includes(term));if(hit){selected=hit[0];e.target.value='';render();}else if(term)$('status').textContent='沒有找到這個上市或上櫃股票；興櫃股票目前尚未收錄。';});
 $('search').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();});$('period').addEventListener('change',render);$('refresh').addEventListener('click',load);
 $('institutionDate').addEventListener('change',e=>{institutionDate=e.target.value;render();});
 $('watchlist').addEventListener('click',e=>{const b=e.target.closest('[data-watch]');if(b&&current()[b.dataset.watch]){selected=b.dataset.watch;render();}});
@@ -335,7 +340,7 @@ $('cancelWatch').addEventListener('click',closeWatchEditor);
 $('addWatchPage').addEventListener('click',()=>{if(editingPages.length>=10){alert('最多可建立 10 個分類。');return;}editingPages.push({title:'新自選焦點',subtitle:'我的觀察清單',codes:[]});renderWatchEditor();$('watchEditor').scrollTop=$('watchEditor').scrollHeight;});
 $('editorPages').addEventListener('input',e=>{const page=e.target.closest('[data-edit-page]');if(page&&e.target.dataset.field)editingPages[Number(page.dataset.editPage)][e.target.dataset.field]=e.target.value;});
 $('editorPages').addEventListener('click',e=>{const page=e.target.closest('[data-edit-page]');if(!page)return;const i=Number(page.dataset.editPage),remove=e.target.closest('[data-remove-code]');if(remove){editingPages[i].codes=editingPages[i].codes.filter(code=>code!==remove.dataset.removeCode);renderWatchEditor();return;}if(e.target.closest('[data-delete-page]')){if(editingPages.length===1){alert('至少需保留一個分類。');return;}editingPages.splice(i,1);renderWatchEditor();}});
-$('editorPages').addEventListener('submit',e=>{if(!e.target.matches('.addstock'))return;e.preventDefault();const page=e.target.closest('[data-edit-page]'),i=Number(page.dataset.editPage),input=e.target.querySelector('[data-new-code]'),code=input.value.trim();if(!/^\d{4,6}$/.test(code)){alert('請輸入 4～6 位數股票代號。');return;}if(!current()[code]){alert('目前資料中找不到這支上市股票。');return;}if(editingPages[i].codes.includes(code)){alert('這支股票已在此分類。');return;}if(editingPages[i].codes.length>=10){alert('每個分類最多 10 支股票。');return;}editingPages[i].codes.push(code);renderWatchEditor();});
+$('editorPages').addEventListener('submit',e=>{if(!e.target.matches('.addstock'))return;e.preventDefault();const page=e.target.closest('[data-edit-page]'),i=Number(page.dataset.editPage),input=e.target.querySelector('[data-new-code]'),code=input.value.trim();if(!/^\d{4,6}$/.test(code)){alert('請輸入 4～6 位數股票代號。');return;}if(!current()[code]){alert('目前資料中找不到這支上市或上櫃股票。');return;}if(editingPages[i].codes.includes(code)){alert('這支股票已在此分類。');return;}if(editingPages[i].codes.length>=10){alert('每個分類最多 10 支股票。');return;}editingPages[i].codes.push(code);renderWatchEditor();});
 $('saveWatch').addEventListener('click',()=>{try{saveWatchPages();closeWatchEditor();}catch(_){alert('瀏覽器無法儲存設定，請確認未停用網站儲存空間。');}});
 $('exportWatch').addEventListener('click',downloadWatchSettings);
 $('importWatch').addEventListener('click',()=>$('importWatchFile').click());

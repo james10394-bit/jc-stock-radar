@@ -88,6 +88,35 @@ class TestTWSE(unittest.TestCase):
         self.assertEqual(quote['quote_time'], '23:59:59')
         self.assertEqual(quote['session'], '夜盤交易中')
 
+    def test_tpex_institutions(self):
+        row = ['5274','信驊','1000','300','700','0','0','0','1000','300','700',
+               '200','50','150','10','20','-10','30','5','25','40','25','15','865']
+        payload = {'stat':'ok','tables':[{'data':[row]}]}
+        stock = update.tpex_institutions(payload, '2026-09-21')['5274']
+        self.assertEqual(stock['foreign']['net'], 700)
+        self.assertEqual(stock['trust']['net'], 150)
+        self.assertEqual(stock['dealer']['net'], 15)
+        self.assertEqual(stock['market'], '上櫃')
+
+    def test_tpex_daily_rows(self):
+        fields = ['代號','名稱','收盤','漲跌','開盤','最高','最低','均價','成交股數']
+        payload = {'stat':'ok','tables':[{'fields':fields,'data':[
+            ['5274','信驊','15000','+100','14900','15100','14850','15020','250000'],
+            ['00679B','ETF','30','0','30','30','30','30','1000']
+        ]}]}
+        rows = update.tpex_daily_rows(payload, '2026-09-21')
+        self.assertEqual(rows['5274']['close'], 15000)
+        self.assertNotIn('00679B', rows)
+
+    def test_tpex_company_profiles(self):
+        rows = [{'SecuritiesCompanyCode':'5274','CompanyName':'信驊科技股份有限公司',
+                 'CompanyAbbreviation':'信驊','SecuritiesIndustryCode':'24','Chairman':'林鴻明',
+                 'DateOfListing':'20130430','Paidin.Capital.NTDollars':'400000000','WebAddress':'https://www.aspeedtech.com'}]
+        profile = update.tpex_company_profiles(rows)['5274']
+        self.assertEqual(profile['market'], '上櫃')
+        self.assertEqual(profile['listed'], '2013-04-30')
+        self.assertIn('伺服器管理晶片', profile['business'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -22,6 +22,9 @@ QUOTES = 'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL'
 PE = 'https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_d'
 COMPANY_INFO = 'https://openapi.twse.com.tw/v1/opendata/t187ap03_L'
 MI_INDEX = 'https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX'
+TPEX_OPENAPI = 'https://www.tpex.org.tw/openapi/v1/'
+TPEX_DAILY = 'https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes'
+TPEX_INSTI = 'https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade'
 YAHOO_CHART = 'https://query1.finance.yahoo.com/v8/finance/chart/'
 GOOGLE_NEWS = 'https://news.google.com/rss/search'
 TAIFEX_QUOTES = 'https://mis.taifex.com.tw/futures/api/getQuoteList'
@@ -65,6 +68,9 @@ INDUSTRY_BUSINESS = {
     '29': ('電子通路', '電子零組件代理與通路服務'),
     '30': ('資訊服務', '軟體、系統整合與資訊服務'),
     '31': ('其他電子', '電子製造、設備與其他電子產品'),
+    '32': ('文化創意', '文化內容、媒體、遊戲與創意服務'),
+    '33': ('農業科技', '農業、生技農業與相關科技服務'),
+    '34': ('電子商務', '網路平台、電子商務與數位服務'),
     '35': ('綠能環保', '再生能源、節能與環境服務'),
     '36': ('數位雲端', '雲端、數位平台與網路服務'),
     '37': ('運動休閒', '運動器材、休閒產品與服務'),
@@ -85,6 +91,9 @@ BUSINESS_OVERRIDES = {
     '2368': '印刷電路板製造', '2344': '記憶體晶片製造',
     '3443': 'IC 設計與高速傳輸晶片', '3661': '高階覆晶封裝基板',
     '3017': '伺服器機殼、散熱與機構件', '4958': '連接器、線材與電子零組件',
+    '6147': '半導體封裝測試與顯示器驅動IC測試',
+    '5274': '伺服器管理晶片與遠端管理晶片設計',
+    '4768': '半導體與光電製程用特用化學材料',
 }
 
 
@@ -223,9 +232,90 @@ def company_profiles(payload):
             'capital': number(row.get('實收資本額')),
             'website': str(row.get('網址') or '').strip(),
             'address': str(row.get('住址') or '').strip(),
+            'market': '上市',
         }
     if not result:
         raise ValueError('No company profiles returned by TWSE OpenAPI')
+    return result
+
+
+def tpex_company_profiles(payload):
+    """Normalize TPEx listed-company registry into the same profile shape."""
+    if not isinstance(payload, list):
+        raise ValueError('Expected TPEx company profile array')
+    result = {}
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        code = str(row.get('SecuritiesCompanyCode') or '').strip()
+        if not re.fullmatch(r'\d{4}', code):
+            continue
+        industry_code = str(row.get('SecuritiesIndustryCode') or '').strip().zfill(2)
+        industry, generic = INDUSTRY_BUSINESS.get(industry_code, ('其他業', '多元產品製造或專業服務'))
+        result[code] = {
+            'name': str(row.get('CompanyAbbreviation') or row.get('CompanyName') or '').strip(),
+            'full_name': str(row.get('CompanyName') or '').strip(),
+            'industry': industry, 'business': BUSINESS_OVERRIDES.get(code, generic),
+            'chairman': str(row.get('Chairman') or '').strip(),
+            'general_manager': str(row.get('GeneralManager') or '').strip(),
+            'established': date_string(row.get('DateOfIncorporation')),
+            'listed': date_string(row.get('DateOfListing')),
+            'capital': number(row.get('Paidin.Capital.NTDollars')),
+            'website': str(row.get('WebAddress') or '').strip(),
+            'address': str(row.get('Address') or '').strip(), 'market': '上櫃',
+        }
+    if not result:
+        raise ValueError('No TPEx company profiles returned')
+    return result
+
+
+def tpex_institutions(payload, day=None):
+    """Parse the dated TPEx three-institution table by its documented groups."""
+    if not isinstance(payload, dict) or payload.get('stat') != 'ok':
+        return {}
+    tables = payload.get('tables') or []
+    if not tables or not isinstance(tables[0].get('data'), list):
+        return {}
+    result = {}
+    for row in tables[0]['data']:
+        if len(row) < 24:
+            continue
+        code = str(row[0]).strip()
+        if not re.fullmatch(r'\d{4}', code):
+            continue
+        foreign = {'buy': number(row[2]), 'sell': number(row[3]), 'net': number(row[4])}
+        trust = {'buy': number(row[11]), 'sell': number(row[12]), 'net': number(row[13])}
+        dealer = {'buy': number(row[20]), 'sell': number(row[21]), 'net': number(row[22])}
+        if any(x['net'] is None for x in (foreign, trust, dealer)):
+            continue
+        result[code] = {'name': str(row[1]).strip(), 'foreign': foreign, 'trust': trust,
+                        'dealer': dealer, 'market': '上櫃'}
+    return result
+
+
+def tpex_daily_rows(payload, day):
+    """Return all four-digit OTC OHLC rows from a dated official daily report."""
+    if not isinstance(payload, dict) or payload.get('stat') != 'ok':
+        return {}
+    tables = payload.get('tables') or []
+    if not tables:
+        return {}
+    table = tables[0]
+    fields = table.get('fields') or []
+    indexes = {name: fields.index(label_name) if label_name in fields else None for name, label_name in {
+        'code': '代號', 'open': '開盤', 'high': '最高', 'low': '最低', 'close': '收盤', 'volume': '成交股數'
+    }.items()}
+    if any(v is None for v in indexes.values()):
+        raise ValueError('TPEx daily quote columns changed')
+    result = {}
+    for row in table.get('data') or []:
+        code = str(row[indexes['code']]).strip()
+        if not re.fullmatch(r'\d{4}', code):
+            continue
+        parsed = {'date': day}
+        parsed.update({key: number(row[idx]) for key, idx in indexes.items() if key != 'code'})
+        if all(parsed[x] is not None for x in ('open', 'high', 'low', 'close')):
+            result[code] = parsed
     return result
 
 
@@ -605,8 +695,15 @@ def main():
     days = old.get('days', {})
     histories = old.get('price_history', {})
     price_sessions = set(old.get('all_price_sessions', []))
+    otc_price_sessions = set(old.get('otc_price_sessions', []))
     target = now.date()
     changed = False
+
+    # Older snapshots predate market labels. Existing records are TWSE unless
+    # they were already explicitly tagged as TPEx.
+    for stocks in days.values():
+        for stock in stocks.values():
+            stock.setdefault('market', '上市')
 
     lookback = 45 if len(days) < 20 else 7
     for ago in range(lookback, -1, -1):
@@ -617,6 +714,8 @@ def main():
         try:
             parsed = institutions(http_json(T86, {'date': day.strftime('%Y%m%d'), 'selectType': 'ALLBUT0999', 'response': 'json'}), iso)
             if parsed:
+                for stock in parsed.values():
+                    stock['market'] = '上市'
                 days[iso] = parsed
                 changed = True
                 print(f'{iso}: {len(parsed)} securities')
@@ -631,6 +730,11 @@ def main():
     except Exception as exc:
         print(f'Company profiles unavailable: {exc}')
         profiles = old.get('company_profiles', {})
+    try:
+        profiles.update(tpex_company_profiles(http_json(TPEX_OPENAPI + 'mopsfin_t187ap03_O')))
+        changed = True
+    except Exception as exc:
+        print(f'TPEx company profiles unavailable: {exc}')
     if latest:
         try:
             quote_rows = rows_by_code(http_json(QUOTES))
@@ -647,6 +751,67 @@ def main():
             changed = True
         except Exception as exc:
             print(f'OpenAPI quote/PE unavailable: {exc}; institution data preserved')
+
+    # Backfill and maintain TPEx institution flows and all-market OHLC history.
+    # Four workers keep the first migration practical without sending a large
+    # burst to the official service.
+    def fetch_otc_day(task):
+        iso, need_flow, need_price = task
+        date_param = iso.replace('-', '/')
+        flow_rows, price_rows_for_day, errors = {}, {}, []
+        if need_flow:
+            try:
+                flow_rows = tpex_institutions(http_json(TPEX_INSTI, {
+                    'date': date_param, 'type': 'Daily', 'sect': 'EW', 'response': 'json'
+                }), iso)
+            except Exception as exc:
+                errors.append(f'institutions: {exc}')
+        if need_price:
+            try:
+                price_rows_for_day = tpex_daily_rows(http_json(TPEX_DAILY, {
+                    'date': date_param, 'id': '', 'response': 'json'
+                }), iso)
+            except Exception as exc:
+                errors.append(f'prices: {exc}')
+        return iso, flow_rows, price_rows_for_day, errors
+
+    otc_tasks = []
+    for iso in sorted(days)[-60:]:
+        has_flow = any(stock.get('market') == '上櫃' for stock in days[iso].values())
+        if not has_flow or iso not in otc_price_sessions:
+            otc_tasks.append((iso, not has_flow, iso not in otc_price_sessions))
+    if otc_tasks:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            for iso, otc_flows, otc_prices, errors in pool.map(fetch_otc_day, otc_tasks):
+                valid_codes = {code for code, p in profiles.items() if p.get('market') == '上櫃'}
+                otc_flows = {code: row for code, row in otc_flows.items() if code in valid_codes}
+                otc_prices = {code: row for code, row in otc_prices.items() if code in valid_codes}
+                if otc_flows:
+                    days[iso].update(otc_flows)
+                    changed = True
+                if otc_prices:
+                    for code, row in otc_prices.items():
+                        merged = {item['date']: item for item in histories.get(code, [])}
+                        merged[iso] = row
+                        histories[code] = [merged[key] for key in sorted(merged)[-80:]]
+                        if iso == latest and code in days[iso]:
+                            days[iso][code]['quote'] = row
+                    otc_price_sessions.add(iso)
+                    changed = True
+                print(f'{iso}: {len(otc_flows)} OTC flows, {len(otc_prices)} OTC prices')
+                for error in errors:
+                    print(f'{iso} TPEx {error}')
+
+    if latest:
+        try:
+            otc_pe = rows_by_code([{**row, 'Code': row.get('SecuritiesCompanyCode')}
+                                   for row in http_json(TPEX_OPENAPI + 'tpex_mainboard_peratio_analysis')])
+            for code, stock in days[latest].items():
+                if stock.get('market') == '上櫃' and code in otc_pe:
+                    stock['pe'] = number(otc_pe[code].get('PriceEarningRatio'))
+            changed = True
+        except Exception as exc:
+            print(f'TPEx PE unavailable: {exc}')
 
     watchlist_pages = load_watchlist()
     try:
@@ -696,10 +861,11 @@ def main():
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.4.3',
+        'version': '2.4.5',
         'days': {key: days[key] for key in sorted(days)[-100:]},
         'price_history': histories,
         'all_price_sessions': sorted(price_sessions)[-80:],
+        'otc_price_sessions': sorted(otc_price_sessions)[-80:],
         'watchlist_pages': watchlist_pages,
         'company_profiles': profiles,
         'night_futures': night_futures,

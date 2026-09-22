@@ -781,6 +781,7 @@ footer {
 .industrybusiness { margin-bottom: 14px !important; padding: 13px 15px; border-left: 3px solid var(--mint); background: #0b1828; border-radius: 0 9px 9px 0; }
 .industrystats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .masterpanel { border-color: #5f543d; background: linear-gradient(145deg, #202520, #101d2f); }
+.modelneighbor { margin-top: 18px; }
 .mastergrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; }
 .mastercard { min-width: 0; padding: 14px; border: 1px solid #344b63; border-radius: 11px; background: #0c1929; }
 .mastercard.bull { border-color: #984b55; background: #311b27; }
@@ -816,6 +817,28 @@ footer {
   align-items: start;
 }
 .stockidentity { padding-top: 8px; }
+.stockidentity h2 {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px;
+  max-width: 100%;
+  line-height: 1.08;
+}
+.stocktitle-code {
+  color: #f2f7fc;
+  font-size: 34px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .5px;
+  white-space: nowrap;
+}
+.stocktitle-name {
+  color: #dceaf5;
+  font-size: clamp(21px, 2vw, 28px);
+  letter-spacing: .5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .stockquick {
   display: grid;
   grid-template-columns: .9fr 1.1fr;
@@ -853,4 +876,7 @@ footer {
   .stockheading .datechooser select { max-width: none; width: 100%; }
   .stockquick { grid-template-columns: 1fr; }
   .quicknews { border-left: 0; border-top: 1px solid #2d445d; }
+  .stockidentity h2 { grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 10px; }
+  .stocktitle-code { font-size: 28px; }
+  .stocktitle-name { font-size: 24px; }
 }

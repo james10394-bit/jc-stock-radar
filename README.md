@@ -1,6 +1,18 @@
-# 台股法人技術分析站 · v2.4.3
+# 台股法人技術分析站 · v2.4.5
 
-這是一套可部署到 GitHub Pages 的台股盤後研究工具，整合臺灣證券交易所上市股票的三大法人資料、外資排行、本益比，以及全上市市場的 KD、布林通道、均線、支撐壓力與規則式操作區間。
+這是一套可部署到 GitHub Pages 的台股盤後研究工具，整合證交所上市與櫃買中心上櫃股票的三大法人資料、外資排行、本益比，以及上市櫃市場的 KD、布林通道、均線、支撐壓力與規則式操作區間。
+
+## v2.4.5 新增內容
+
+- 個股診斷標題改為股票代號在上、公司簡稱在下，桌機版不再因名稱超過兩字而逐字換行。
+- 公司簡稱固定單行顯示，過長時以省略號收尾；手機版則改為代號與名稱同行，節省垂直空間。
+
+## v2.4.4 新增內容
+
+- 納入 TPEx 上櫃股票、公司資料、三大法人、本益比與歷史日線，上市與上櫃股票使用同一套完整技術分析。
+- 修正 6147 頎邦、5274 信驊、4768 晶呈科技等上櫃股票搜尋不到的問題。
+- 「華冠投顧・何丞唐方法模型」與「世界投資大師原則模型」改為相鄰排列，減少頁面跳轉距離。
+- 搜尋與自選清單均可使用上市、上櫃四位數股票代號；興櫃股票目前未收錄。
 
 ## v2.4.3 新增內容
 
@@ -86,7 +98,7 @@
 
 1. 解壓縮 ZIP，把資料夾裡所有檔案上傳到 GitHub 儲存庫根目錄，包含隱藏的 `.github/workflows/update.yml`。
 2. 到 **Settings → Actions → General → Workflow permissions**，選擇 **Read and write permissions** 並儲存。
-3. 到 **Actions → Update TWSE data → Run workflow**，先手動執行一次。第一次會補齊約 20～30 個法人交易日與全市場歷史日線，時間會比日常更新久。
+3. 到 **Actions → Update TWSE and TPEx data → Run workflow**，先手動執行一次。第一次會補齊約 20～30 個法人交易日與上市櫃市場歷史日線，時間會比日常更新久。
 4. 到 **Settings → Pages → Build and deployment**，選 **Deploy from a branch**、`main`、`/(root)`。
 5. 網站通常會出現在 `https://你的帳號.github.io/儲存庫名稱/`。
 
@@ -110,7 +122,7 @@
 }
 ```
 
-每頁最多 10 支，預設 5 頁。修改後到 Actions 手動執行一次，即會把新清單同步到網站。技術行情採全市場統一累積，因此沒有加入自選頁的上市股票也可透過搜尋查看完整技術分析。
+每頁最多 10 支，預設 5 頁。修改後到 Actions 手動執行一次，即會把新清單同步到網站。技術行情採全市場統一累積，因此沒有加入自選頁的上市或上櫃股票也可透過搜尋查看完整技術分析。
 
 每年政府公告次年度休市日後，可在 `data/risk_config.json` 更新日期與名稱；系統會在假期前七日自動加入連假風險分數。
 
@@ -134,7 +146,7 @@
 | 投資大師模型 | 公開理念的規則式檢核，搭配估值、趨勢、法人、夜盤與產業廣度 |
 | 最終綜合比例 | 個股技術面 70%＋全球環境 30% |
 
-技術價格未做除權息還原。外資買進占比是成交資料比例，不是盤中委買委賣。上櫃股票不在此版本範圍。
+技術價格未做除權息還原。外資買進占比是成交資料比例，不是盤中委買委賣。興櫃股票不在此版本範圍。
 新聞只分析公開標題中的預設關鍵字，無法完整理解事件脈絡；「川普因素」或「戰爭因素」不會被直接視為必跌，而是依標題中的關稅、制裁、攻擊、停火等詞彙計分。所有買賣比例均不是勝率預測。
 
 ## 資料來源
@@ -143,6 +155,9 @@
 - [個股日本益比](https://www.twse.com.tw/zh/trading/historical/bwibbu-day.html)
 - [每日收盤行情 MI_INDEX](https://www.twse.com.tw/zh/trading/historical/mi-index.html)
 - [TWSE OpenAPI](https://openapi.twse.com.tw/)
+- [TPEx 上櫃三大法人](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)
+- [TPEx 上櫃股票每日收盤行情](https://www.tpex.org.tw/zh-tw/mainboard/trading/info/stock-pricing.html)
+- [TPEx OpenAPI](https://www.tpex.org.tw/openapi/)
 - [臺灣期交所盤後交易制度](https://www.taifex.com.tw/cht/4/aHIntroduction)
 
 ## 本地檢查
