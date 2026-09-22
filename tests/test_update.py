@@ -70,6 +70,21 @@ class TestTWSE(unittest.TestCase):
         risk = update.risk_block(news, '台海風險', update.STRAIT_WORDS + update.WAR_WORDS)
         self.assertGreater(risk['points'], 0)
 
+    def test_parse_taifex_night_quote(self):
+        payload = {'RtData': {'QuoteList': [{
+            'SymbolID': 'TXFJ6-M', 'DispCName': '臺股期貨 202604',
+            'CLastPrice': '23450', 'CRefPrice': '23300', 'CDiff': '150',
+            'CDiffRate': '0.64', 'COpenPrice': '23320', 'CHighPrice': '23500',
+            'CLowPrice': '23280', 'CTotalVolume': '21499',
+            'CDate': '20260922', 'CTime': '235959'
+        }]}}
+        now = update.dt.datetime(2026, 9, 22, 23, 0, tzinfo=update.TAIPEI)
+        quote = update.parse_taifex_night(payload, now)
+        self.assertEqual(quote['symbol'], 'TXFJ6-M')
+        self.assertEqual(quote['change_pct'], 0.64)
+        self.assertEqual(quote['quote_time'], '23:59:59')
+        self.assertEqual(quote['session'], '夜盤交易中')
+
 
 if __name__ == '__main__':
     unittest.main()

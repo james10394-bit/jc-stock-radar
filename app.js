@@ -1,4 +1,4 @@
-/* TWSE Flow v2.4.1 — historical institution selector and company summaries. */
+/* TWSE Flow v2.4.2 — night futures, industry breadth and public-principles models. */
 const $ = id => document.getElementById(id);
 let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0, institutionDate = null;
 let watchPagesData = [], editingPages = [];
@@ -17,7 +17,7 @@ const sumNet = (a,key='foreign') => a.reduce((s,x)=>s+(Number(x[key]?.net)||0),0
 const sma = (a,n) => a.length>=n?a.slice(-n).reduce((s,x)=>s+x,0)/n:null;
 function std(a,n){if(a.length<n)return null;const v=a.slice(-n),m=sma(v,n);return Math.sqrt(v.reduce((s,x)=>s+(x-m)**2,0)/n);}
 function tick(n){if(!Number.isFinite(n))return null;const t=n<10?.01:n<50?.05:n<100?.1:n<500?.5:n<1000?1:5;return Math.round(n/t)*t;}
-function setValue(id,text,n){const el=$(id);el.textContent=text;el.classList.remove('pos','neg');if(Number.isFinite(n))el.classList.add(color(n));}
+function setValue(id,text,n){const el=$(id);if(!el)return;el.textContent=text;el.classList.remove('pos','neg');if(Number.isFinite(n))el.classList.add(color(n));}
 
 function indicators(rows){
   if(rows.length<20)return null;
@@ -105,6 +105,70 @@ function renderAdvisor(a,flowRows){
   if(!view){$('advisorRatio').innerHTML=ratioBadge({buy:50,sell:50});$('advisorFactors').innerHTML='<div class="advisor-empty">歷史資料滿20個交易日後產生。</div>';return;}
   $('advisorRatio').innerHTML=ratioBadge(view);
   $('advisorFactors').innerHTML=view.factors.map(([name,text,state])=>'<div class="advisorfactor '+state+'"><span>'+escape(name)+'</span><strong>'+escape(text)+'</strong></div>').join('');
+}
+
+function industryAnalysis(code){
+  const profile=market.company_profiles?.[code]||{},industry=profile.industry||'產業資料尚未建立';
+  const peers=Object.entries(market.company_profiles||{}).filter(([,p])=>p.industry===industry).map(([peer])=>peer);
+  const sample=peers.map(peer=>{
+    const rows=prices(peer),quote=last(rows),prior=rows.at(-2),ma20=rows.length>=20?sma(rows.map(x=>x.close),20):null;
+    const latest=latestMarket()[peer],change=quote&&prior&&prior.close?(quote.close/prior.close-1)*100:null;
+    return {change,above:Number.isFinite(ma20)&&quote?quote.close>ma20:null,foreign:latest?.foreign?.net};
+  }).filter(x=>Number.isFinite(x.change));
+  const avg=sample.length?sample.reduce((s,x)=>s+x.change,0)/sample.length:null;
+  const maSample=sample.filter(x=>x.above!==null),foreignSample=sample.filter(x=>Number.isFinite(x.foreign));
+  const abovePct=maSample.length?maSample.filter(x=>x.above).length/maSample.length*100:null;
+  const foreignPct=foreignSample.length?foreignSample.filter(x=>x.foreign>0).length/foreignSample.length*100:null;
+  const raw=(Number.isFinite(avg)?avg*7:0)+(Number.isFinite(abovePct)?(abovePct-50)*.28:0)+(Number.isFinite(foreignPct)?(foreignPct-50)*.22:0);
+  return {profile,industry,sample:sample.length,avg,abovePct,foreignPct,...ratio(raw)};
+}
+function renderIndustry(code){
+  const view=industryAnalysis(code);
+  $('industryName').textContent=view.industry+'產業強弱';
+  $('industryBusiness').textContent=(view.profile.name||code)+'主要業務：'+(view.profile.business||'公司業務資料更新中');
+  $('industryRatio').innerHTML=ratioBadge(view);
+  $('industryStats').innerHTML=[
+    ['同業樣本',view.sample?view.sample+' 家':'資料不足'],
+    ['同業平均日漲跌',Number.isFinite(view.avg)?(view.avg>=0?'+':'')+fmt(view.avg)+'%':'—'],
+    ['站上 MA20',Number.isFinite(view.abovePct)?fmt(view.abovePct,0)+'%':'—'],
+    ['外資買超家數',Number.isFinite(view.foreignPct)?fmt(view.foreignPct,0)+'%':'—']
+  ].map(([name,value])=>'<div><span>'+escape(name)+'</span><b>'+escape(value)+'</b></div>').join('');
+  return view;
+}
+
+function renderNight(){
+  const n=market.night_futures||{},lastPrice=Number(n.last),change=Number(n.change),changePct=Number(n.change_pct);
+  $('nightStatus').textContent=n.session||'最近夜盤快照';
+  $('nightContract').textContent=n.contract||'近月臺股期貨';
+  setValue('nightPrice',Number.isFinite(lastPrice)?fmt(lastPrice,0):'—',change);
+  setValue('nightChange',Number.isFinite(change)?(change>=0?'+':'')+fmt(change,0)+'（'+(changePct>=0?'+':'')+fmt(changePct)+'%）':'—',change);
+  $('nightOpen').textContent=Number.isFinite(Number(n.open))?fmt(Number(n.open),0):'—';
+  $('nightRange').textContent=Number.isFinite(Number(n.high))&&Number.isFinite(Number(n.low))?fmt(Number(n.high),0)+'／'+fmt(Number(n.low),0):'—';
+  $('nightVolume').textContent=Number.isFinite(Number(n.volume))?fmt(Number(n.volume),0)+' 口':'—';
+  $('nightUpdated').textContent=n.quote_date&&n.quote_time?'期交所行情 '+n.quote_date+' '+n.quote_time+'；排程可能延遲，不是券商逐筆即時價。':'尚未取得夜盤快照；請執行新版 GitHub Actions 更新資料。';
+}
+
+function masterModels(a,flowRows,industry){
+  const latest=latestMarket()[selected]||{},pe=Number(latest.pe),flow5=sumNet(flowRows.slice(-5));
+  const globalBuy=Number(market.global_context?.buy_percent)||50,night=Number(market.night_futures?.change_pct)||0;
+  const q=a?.quote,i=a?.ind,inBuy=a&&q.close>=a.buyLow*.98&&q.close<=a.buyHigh*1.02;
+  const models=[];
+  let raw=(pe>0&&pe<=25?13:pe>40?-13:0)+(industry.buy-50)*.25+(a&&q.close<a.ind.upper?5:-5);
+  models.push({name:'華倫・巴菲特',principle:'合理價格 × 企業品質',view:ratio(raw),text:(pe>0?'本益比 '+fmt(pe)+' 倍；':'本益比不足；')+'仍需核對 ROE、自由現金流與護城河。'});
+  raw=(a?a.score*9:0)+(flow5>0?10:flow5<0?-10:0)+(globalBuy-50)*.2+Math.max(-12,Math.min(12,night*4));
+  models.push({name:'喬治・索羅斯',principle:'趨勢驗證 × 嚴守停損',view:ratio(raw),text:a?(q.close<a.stop?'已跌破停損參考，風險優先。':'趨勢、法人與全球市場是否互相確認。'):'技術資料不足，暫採中性。'});
+  raw=(industry.buy-50)*.3+(pe>0&&pe<=30?10:pe>45?-10:0)+(industry.profile.business?6:0);
+  models.push({name:'彼得・林區',principle:'看懂公司 × 成長配估值',view:ratio(raw),text:(industry.profile.business||'公司業務待補')+'；仍需核對盈餘成長率與負債。'});
+  raw=(globalBuy-50)*.35+(i&&i.k<30?10:i&&i.k>80?-10:0)+(a&&q.close<=a.ind.ma20?5:-3)+(night*2);
+  models.push({name:'安德烈・科斯托蘭尼',principle:'資金 × 心理 × 耐心',view:ratio(raw),text:'以全球資金、夜盤與市場心理判讀，避免只因單日消息追價。'});
+  raw=(industry.buy-50)*.35+(flow5>0?10:flow5<0?-10:0)+(inBuy?12:a&&q.close>=a.sellLow?-12:0);
+  models.push({name:'是川銀藏',principle:'親自研究 × 產業前景',view:ratio(raw),text:(inBuy?'接近支撐觀察區；':'目前不在買進觀察區；')+'仍需查證產品供需與產業轉折。'});
+  return models;
+}
+function renderMasters(a,flowRows,industry){
+  const models=masterModels(a,flowRows,industry),buy=Math.round(models.reduce((s,x)=>s+x.view.buy,0)/models.length),overall={buy,sell:100-buy};
+  $('mastersRatio').innerHTML=ratioBadge(overall);
+  $('masterModels').innerHTML=models.map(x=>{const state=x.view.buy>=60?'bull':x.view.buy<=40?'bear':'neutral';return '<article class="mastercard '+state+'"><header><h4>'+escape(x.name)+'</h4><b>買 '+x.view.buy+'%</b></header><span>'+escape(x.principle)+'</span><p>'+escape(x.text)+'</p></article>';}).join('');
 }
 
 function renderGlobal(){
@@ -231,13 +295,13 @@ function render(){
   $('details').innerHTML=[['外資及陸資',f],['投信',stock.trust],['自營商',stock.dealer]].map(([name,x])=>'<tr><td>'+name+'</td><td>'+lots(x.buy).replace('+','')+'</td><td>'+lots(x.sell).replace('+','')+'</td><td class="'+color(x.net)+'">'+lots(x.net)+'</td></tr>').join('');
   const total=f.buy+f.sell,ratio=Number.isFinite(total)&&total>0?f.buy/total:null;$('gaugeFill').style.width=ratio===null?'0%':(ratio*100).toFixed(1)+'%';$('gaugeText').innerHTML=ratio===null?'買賣分項不足':'<span>買進 '+fmt(ratio*100)+'%</span><span>賣出 '+fmt((1-ratio)*100)+'%</span>';
   $('kd').textContent=a?'K '+fmt(a.ind.k,1)+' / D '+fmt(a.ind.d,1):'—';$('boll').textContent=a?fmt(a.ind.lower)+' / '+fmt(a.ind.middle)+' / '+fmt(a.ind.upper):'—';$('ma').textContent=a?'MA5 '+fmt(a.ind.ma5)+' · MA10 '+fmt(a.ind.ma10)+' · MA20 '+fmt(a.ind.ma20):'—';
-  flowChart(periodRows);technicalChart(priceRows,a);renderPlan(a);renderAdvice(a);renderAdvisor(a,availableFlows);renderGlobal();renderWatchlist();rank();
+  flowChart(periodRows);technicalChart(priceRows,a);renderPlan(a);renderAdvice(a);renderAdvisor(a,availableFlows);const industry=renderIndustry(selected);renderNight();renderMasters(a,availableFlows,industry);renderGlobal();renderWatchlist();rank();
 }
 
 async function load(){
   $('status').textContent='正在載入證交所盤後資料…';
-  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.4.1');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
-  catch(e){$('stamp').textContent='尚未取得資料';$('content').hidden=true;$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
+  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.4.2');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
+  catch(e){if($('stamp'))$('stamp').textContent='尚未取得資料';if($('content'))$('content').hidden=true;if($('status'))$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
 }
 
 $('search').addEventListener('change',e=>{const term=e.target.value.trim(),list=Object.entries(current());const hit=list.find(([code])=>code===term)||list.find(([code,s])=>code.includes(term)||s.name.includes(term));if(hit){selected=hit[0];e.target.value='';render();}else if(term)$('status').textContent='沒有找到這個上市股票。';});

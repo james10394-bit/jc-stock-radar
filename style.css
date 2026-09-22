@@ -660,8 +660,10 @@ footer {
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  overscroll-behavior: contain;
 }
+.watchhub::-webkit-scrollbar { width: 0; height: 0; }
 .watchtop { display: flex; align-items: start; justify-content: space-between; gap: 10px; }
 .watchtop .sectiontitle h2 { font-size: 23px; }
 .watchtop .sectiontitle p { line-height: 1.55; }
@@ -752,4 +754,56 @@ footer {
   .editorbar { bottom: -16px; }
   .editorspacer { display: none; }
   .editorbar button { flex: 1 1 auto; }
+}
+
+/* v2.4.2 — prevent right-rail overlap, night market and industry models */
+.analysiscol .metrics.five { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.analysiscol .card { min-width: 0; }
+.analysiscol .card strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+.nightrow { grid-template-columns: .9fr 1.1fr; }
+.nightpanel { border-color: #3a5574; background: linear-gradient(145deg, #142943, #101d2f); }
+.nightquote { display: flex; justify-content: space-between; align-items: end; gap: 14px; margin: 8px 0 18px; }
+.nightquote span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 7px; }
+.nightquote > div > strong { display: block; font-size: clamp(29px, 4vw, 44px); line-height: 1; }
+.nightquote > strong { font-size: 22px; white-space: nowrap; }
+.nightstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.nightstats div, .industrystats div {
+  display: grid; gap: 7px; padding: 13px; border: 1px solid #2c425a;
+  border-radius: 10px; background: #0c1929; min-width: 0;
+}
+.nightstats span, .industrystats span { color: var(--muted); font-size: 11px; }
+.nightstats b, .industrystats b { font-size: 15px; overflow-wrap: anywhere; }
+.sourceanchor { color: #77e0c5; text-decoration: none; font-size: 12px; }
+.industrybusiness { margin-bottom: 14px !important; padding: 13px 15px; border-left: 3px solid var(--mint); background: #0b1828; border-radius: 0 9px 9px 0; }
+.industrystats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.masterpanel { border-color: #5f543d; background: linear-gradient(145deg, #202520, #101d2f); }
+.mastergrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; }
+.mastercard { min-width: 0; padding: 14px; border: 1px solid #344b63; border-radius: 11px; background: #0c1929; }
+.mastercard.bull { border-color: #984b55; background: #311b27; }
+.mastercard.bear { border-color: #32816e; background: #164039; }
+.mastercard.neutral { border-color: #806b3d; background: #322b1b; }
+.mastercard header { display: flex; justify-content: space-between; gap: 7px; align-items: start; }
+.mastercard h4 { margin: 0; font-size: 14px; }
+.mastercard header b { font-size: 12px; white-space: nowrap; }
+.mastercard.bull header b { color: #ff929c; }
+.mastercard.bear header b { color: #69e4c1; }
+.mastercard.neutral header b { color: #efc96f; }
+.mastercard > span { display: block; color: #efc96f; font-size: 10px; letter-spacing: .5px; margin: 10px 0 7px; }
+.mastercard p { color: #c4d3e0; font-size: 12px; line-height: 1.55; }
+.masterdisclaimer { margin-top: 14px !important; padding-top: 13px; border-top: 1px solid #33475e; font-size: 11px !important; }
+@media (max-width: 1180px) { .mastergrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) {
+  .analysiscol .metrics.five { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nightrow { grid-template-columns: 1fr; }
+  .mastergrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 610px) {
+  .analysiscol .metrics.five { grid-template-columns: 1fr; }
+  .nightquote { align-items: start; }
+  .nightstats, .industrystats { grid-template-columns: 1fr; }
+  .mastergrid { grid-template-columns: 1fr; }
 }

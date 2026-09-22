@@ -23,6 +23,7 @@ COMPANY_INFO = 'https://openapi.twse.com.tw/v1/opendata/t187ap03_L'
 MI_INDEX = 'https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX'
 YAHOO_CHART = 'https://query1.finance.yahoo.com/v8/finance/chart/'
 GOOGLE_NEWS = 'https://news.google.com/rss/search'
+TAIFEX_QUOTES = 'https://mis.taifex.com.tw/futures/api/getQuoteList'
 
 POSITIVE_NEWS = ('上漲', '走高', '降息', '寬鬆', '成長', '優於預期', '突破', '創高', '和平', '停火',
                  'rally', 'gain', 'rate cut', 'growth', 'beats', 'ceasefire', 'peace')
@@ -293,6 +294,64 @@ def http_json(url, params=None):
         return json.load(response)
 
 
+def http_post_json(url, payload):
+    body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+    request = urllib.request.Request(url, data=body, method='POST', headers={
+        'User-Agent': 'Mozilla/5.0 TWSE-Flow/2.4.2',
+        'Accept': 'application/json', 'Content-Type': 'application/json',
+        'Origin': 'https://mis.taifex.com.tw',
+        'Referer': 'https://mis.taifex.com.tw/futures/RegularSession/EquityIndices/FuturesDomestic/',
+    })
+    with urllib.request.urlopen(request, timeout=30) as response:
+        if 'json' not in response.headers.get('content-type', '').lower():
+            raise ValueError('Non-JSON response from TAIFEX quote service')
+        return json.load(response)
+
+
+def parse_taifex_night(payload, now):
+    """Select the active nearest-month TX future from the official quote list."""
+    rows = ((payload or {}).get('RtData') or {}).get('QuoteList') or []
+    candidates = []
+    for row in rows:
+        symbol = str(row.get('SymbolID') or '')
+        last_price, volume = number(row.get('CLastPrice')), number(row.get('CTotalVolume'))
+        if symbol.startswith('TXF') and symbol.endswith('-M') and last_price not in (None, 0):
+            candidates.append((volume or 0, row, last_price))
+    if not candidates:
+        raise ValueError('No active TX nearest-month quote returned')
+    _, row, last_price = max(candidates, key=lambda item: item[0])
+    reference = number(row.get('CRefPrice'))
+    change = number(row.get('CDiff'))
+    if change is None and reference is not None:
+        change = last_price - reference
+    change_pct = number(row.get('CDiffRate'))
+    if change_pct is None and reference:
+        change_pct = change / reference * 100
+    raw_time = re.sub(r'\D', '', str(row.get('CTime') or ''))
+    quote_time = ':'.join([raw_time[:2], raw_time[2:4], raw_time[4:6]]) if len(raw_time) >= 6 else str(row.get('CTime') or '')
+    weekday, hour = now.weekday(), now.hour
+    is_open = (weekday <= 4 and hour >= 15) or (1 <= weekday <= 5 and hour < 5)
+    return {
+        'contract': str(row.get('DispCName') or row.get('SymbolName') or '近月臺股期貨'),
+        'symbol': str(row.get('SymbolID') or ''), 'last': round(last_price, 2),
+        'reference': reference, 'change': round(change, 2) if change is not None else None,
+        'change_pct': round(change_pct, 2) if change_pct is not None else None,
+        'open': number(row.get('COpenPrice')), 'high': number(row.get('CHighPrice')),
+        'low': number(row.get('CLowPrice')), 'volume': number(row.get('CTotalVolume')),
+        'quote_date': date_string(row.get('CDate')), 'quote_time': quote_time,
+        'session': '夜盤交易中' if is_open else '最近夜盤收盤',
+        'updated_at': now.isoformat(timespec='seconds'),
+        'source_url': 'https://mis.taifex.com.tw/futures/RegularSession/EquityIndices/FuturesDomestic/',
+    }
+
+
+def fetch_taifex_night(now):
+    payload = http_post_json(TAIFEX_QUOTES, {
+        'MarketType': '1', 'SymbolType': 'F', 'KindID': '1', 'CID': '', 'ExpireMonth': ''
+    })
+    return parse_taifex_night(payload, now)
+
+
 def market_indicator(symbol, name):
     payload = http_json(YAHOO_CHART + urllib.parse.quote(symbol), {
         'range': '10d', 'interval': '1d', 'events': 'history'
@@ -532,6 +591,12 @@ def main():
 
     watchlist_pages = load_watchlist()
     try:
+        night_futures = fetch_taifex_night(now)
+        changed = True
+    except Exception as exc:
+        print(f'TAIFEX night quote unavailable: {exc}')
+        night_futures = old.get('night_futures', {})
+    try:
         global_context = fetch_global_context(now)
         changed = True
     except Exception as exc:
@@ -562,12 +627,13 @@ def main():
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.4.1',
+        'version': '2.4.2',
         'days': {key: days[key] for key in sorted(days)[-100:]},
         'price_history': histories,
         'all_price_sessions': sorted(price_sessions)[-80:],
         'watchlist_pages': watchlist_pages,
         'company_profiles': profiles,
+        'night_futures': night_futures,
         'global_context': global_context,
         'updated_at': now.isoformat(timespec='seconds'),
         'latest_session': max(days),

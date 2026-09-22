@@ -7,11 +7,11 @@
   <meta name="description" content="整合臺灣證券交易所三大法人、KD、布林通道、均線與支撐壓力的台股研究工具。">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2312b89a'/%3E%3Cpath d='M12 42l12-13 9 8 19-22v12L34 48l-10-9-12 13z' fill='white'/%3E%3C/svg%3E">
   <title>台股法人技術分析站</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2.4.2">
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE FLOW · v2.4.1 法人日期與公司業務版</small></div></div>
+  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE FLOW · v2.4.2 夜盤與產業模型版</small></div></div>
   <a href="https://www.twse.com.tw/" target="_blank" rel="noopener">官方資料：臺灣證券交易所 ↗</a>
 </header>
 <main>
@@ -40,7 +40,7 @@
       <div id="status" role="status"></div>
 
       <section class="grid" id="content" hidden>
-    <div class="heading"><div><div class="eyebrow">個股完整診斷</div><h2 id="title">—</h2></div><label class="datechooser">法人資料日期<select id="institutionDate" aria-label="選擇法人資料日期"></select></label></div>
+    <div class="heading"><div><div class="eyebrow">個股完整診斷</div><h2 id="title">—</h2></div><label class="datechooser">法人資料日期<select id="institutionDate" aria-label="選擇法人資料日期"></select><span id="dateBadge" hidden></span></label></div>
     <div class="sectiontitle blocktitle"><div class="eyebrow">法人核心數字</div><h2>法人籌碼總覽</h2></div>
     <div class="metrics five">
       <article class="card accent"><span>外資當日買賣超</span><strong id="foreignToday">—</strong><div id="foreignSub" class="sub"></div></article>
@@ -99,6 +99,30 @@
       </article>
     </div>
 
+    <div class="sectiontitle blocktitle"><div class="eyebrow">盤後先行指標 × 產業基本面</div><h2>台指期夜盤與產業強弱</h2></div>
+    <div class="columns nightrow nomargin">
+      <article class="panel nightpanel">
+        <div class="panelhead"><div><h3>台股夜盤（臺股期貨）</h3><p>臺灣期交所最近月份契約，約每 15 分鐘更新</p></div><span id="nightStatus" class="pill">讀取中</span></div>
+        <div class="nightquote"><div><span id="nightContract">近月臺股期貨</span><strong id="nightPrice">—</strong></div><strong id="nightChange">—</strong></div>
+        <div class="nightstats"><div><span>開盤</span><b id="nightOpen">—</b></div><div><span>最高／最低</span><b id="nightRange">—</b></div><div><span>成交量</span><b id="nightVolume">—</b></div></div>
+        <p class="hint" id="nightUpdated">尚未取得夜盤快照。</p>
+        <a class="sourceanchor" href="https://mis.taifex.com.tw/futures/RegularSession/EquityIndices/FuturesDomestic/" target="_blank" rel="noopener">臺灣期交所行情資訊 ↗</a>
+      </article>
+      <article class="panel industrypanel">
+        <div class="panelhead"><div><h3 id="industryName">產業強弱分析</h3><p>同產業上市公司價格、月線與外資廣度</p></div><div id="industryRatio"></div></div>
+        <p id="industryBusiness" class="industrybusiness">公司業務資料讀取中…</p>
+        <div id="industryStats" class="industrystats"></div>
+        <p class="hint">產業數據是同產業樣本的規則式比較；公司競爭力仍需搭配財報、產品與產業循環判讀。</p>
+      </article>
+    </div>
+
+    <div class="sectiontitle blocktitle"><div class="eyebrow">公開投資觀念量化</div><h2>世界投資大師原則模型</h2></div>
+    <article class="panel masterpanel">
+      <div class="panelhead"><div><h3>價值、趨勢、成長、心理與研究紀律</h3><p>將五位投資家的公開理念轉成可檢查條件，再結合個股產業資料。</p></div><div id="mastersRatio"></div></div>
+      <div id="masterModels" class="mastergrid"></div>
+      <p class="masterdisclaimer">此區為本站依公開投資原則建立的簡化模型，不代表巴菲特、索羅斯、彼得・林區、科斯托蘭尼或是川銀藏本人意見、授權或即時建議；缺少現金流、ROE、成長率等資料時會明確提示需另行核對。</p>
+    </article>
+
     <div class="sectiontitle blocktitle"><div class="eyebrow">全球事件風險</div><h2>美股、連假與重大新聞影響</h2></div>
     <div class="columns globalrow nomargin">
       <article class="panel">
@@ -140,8 +164,8 @@
 </dialog>
 <footer>
   資料取自臺灣證券交易所公開盤後資料及公開市場／新聞摘要。所有比例均為固定公式評分，不代表上漲機率或獲利保證，僅供研究參考，不構成投資建議。<br>
-  <a href="https://www.twse.com.tw/zh/trading/foreign/t86.html">三大法人</a> · <a href="https://www.twse.com.tw/zh/trading/historical/bwibbu-day.html">本益比</a> · <a href="https://www.twse.com.tw/zh/trading/historical/stock-day.html">個股日成交</a>
+  <a href="https://www.twse.com.tw/zh/trading/foreign/t86.html">三大法人</a> · <a href="https://www.twse.com.tw/zh/trading/historical/bwibbu-day.html">本益比</a> · <a href="https://www.twse.com.tw/zh/trading/historical/stock-day.html">個股日成交</a> · <a href="https://www.taifex.com.tw/cht/4/aHIntroduction">臺股期貨夜盤</a>
 </footer>
-<script src="app.js" defer></script>
+<script src="app.js?v=2.4.2" defer></script>
 </body>
 </html>
