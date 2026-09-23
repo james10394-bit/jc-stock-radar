@@ -6,6 +6,17 @@ import update
 
 
 class TestTWSE(unittest.TestCase):
+    def test_latest_close_is_independent_from_institution_date(self):
+        snapshot = update.latest_close_snapshot(
+            {'6770': {'close': 73.1}}, {},
+            {'6770': [{'date': '2026-09-22', 'close': 71.8}]},
+            '2026-09-23', '2026-09-23T13:45:00+08:00')
+        quote = snapshot['quotes']['6770']
+        self.assertEqual(snapshot['date'], '2026-09-23')
+        self.assertAlmostEqual(quote['previous_close'], 71.8)
+        self.assertAlmostEqual(quote['change'], 1.3)
+        self.assertAlmostEqual(quote['change_pct'], 1.8105849582)
+
     def test_dates_and_numeric_formats(self):
         self.assertEqual(update.date_string('1150731'), '2026-07-31')
         self.assertEqual(update.date_string('20260915'), '2026-09-15')

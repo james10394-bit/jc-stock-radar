@@ -389,6 +389,28 @@ def all_market_rows(payload, day):
     raise ValueError('MI_INDEX all-stock OHLC table not found')
 
 
+def latest_close_snapshot(listed_rows, otc_rows, histories, day, updated_at):
+    """Build a close-only snapshot without waiting for institution reports."""
+    quotes = {}
+    for market_name, rows in (('上市', listed_rows), ('上櫃', otc_rows)):
+        for code, row in rows.items():
+            close = number(row.get('close'))
+            if close is None:
+                continue
+            prior_rows = [item for item in histories.get(code, [])
+                          if item.get('date') and item['date'] < day and number(item.get('close')) is not None]
+            previous_close = number(prior_rows[-1].get('close')) if prior_rows else None
+            change = close - previous_close if previous_close not in (None, 0) else None
+            quotes[code] = {
+                'close': close,
+                'previous_close': previous_close,
+                'change': change,
+                'change_pct': change / previous_close * 100 if change is not None else None,
+                'market': market_name,
+            }
+    return {'date': day, 'updated_at': updated_at, 'quotes': quotes}
+
+
 def http_json(url, params=None):
     if params:
         url += '?' + urllib.parse.urlencode(params)
@@ -728,6 +750,7 @@ def main():
     alpha_price_sessions = set(old.get('twse_alpha_sessions', []))
     target = now.date()
     changed = False
+    latest_quotes = old.get('latest_quotes', {})
 
     # Older snapshots predate market labels. Existing records are TWSE unless
     # they were already explicitly tagged as TPEx.
@@ -765,6 +788,31 @@ def main():
         changed = True
     except Exception as exc:
         print(f'TPEx company profiles unavailable: {exc}')
+
+    # Closing prices are published before institution reports. Fetch them
+    # independently so today's close is not blocked by a delayed T86 file.
+    if target.weekday() < 5 and (now.hour > 13 or (now.hour == 13 and now.minute >= 35)):
+        listed_today, otc_today = {}, {}
+        today_iso = target.isoformat()
+        try:
+            listed_today = all_market_rows(http_json(MI_INDEX, {
+                'date': target.strftime('%Y%m%d'), 'type': 'ALLBUT0999', 'response': 'json'
+            }), today_iso)
+        except Exception as exc:
+            print(f'{today_iso} latest TWSE close unavailable: {exc}')
+        try:
+            otc_today = tpex_daily_rows(http_json(TPEX_DAILY, {
+                'date': today_iso.replace('-', '/'), 'id': '', 'response': 'json'
+            }), today_iso)
+            valid_otc = {code for code, profile in profiles.items() if profile.get('market') == '上櫃'}
+            otc_today = {code: row for code, row in otc_today.items() if code in valid_otc}
+        except Exception as exc:
+            print(f'{today_iso} latest TPEx close unavailable: {exc}')
+        if listed_today or otc_today:
+            latest_quotes = latest_close_snapshot(
+                listed_today, otc_today, histories, today_iso, now.isoformat(timespec='seconds'))
+            changed = True
+            print(f'{today_iso}: {len(latest_quotes["quotes"])} independent closing prices')
     if latest:
         try:
             quote_rows = rows_by_code(http_json(QUOTES))
@@ -953,7 +1001,7 @@ def main():
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.4.12',
+        'version': '2.4.13',
         'days': {key: days[key] for key in sorted(days)[-100:]},
         'price_history': histories,
         'all_price_sessions': sorted(price_sessions)[-80:],
@@ -965,6 +1013,7 @@ def main():
         'global_context': global_context,
         'stock_news': stock_news,
         'stock_news_updated_at': stock_news_updated_at,
+        'latest_quotes': latest_quotes,
         'updated_at': now.isoformat(timespec='seconds'),
         'latest_session': max(days),
     })
