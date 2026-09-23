@@ -20,6 +20,14 @@ class TestTWSE(unittest.TestCase):
         self.assertEqual(data['dealer']['net'],-2500)
         self.assertEqual(sum(data[x]['net'] for x in ('foreign','trust','dealer')),4500)
 
+    def test_alphanumeric_security_code(self):
+        fields = ['證券代號','證券名稱','外陸資買進股數(不含外資自營商)','外陸資賣出股數(不含外資自營商)','外陸資買賣超股數(不含外資自營商)','投信買進股數','投信賣出股數','投信買賣超股數','自營商買進股數','自營商賣出股數','自營商買賣超股數']
+        row = ['00981A','主動統一台股增長','10000','4000','6000','2000','1000','1000','500','300','200']
+        stock = update.institutions({'stat':'OK','fields':fields,'data':[row]},'2026-09-22')['00981A']
+        self.assertEqual(stock['name'], '主動統一台股增長')
+        self.assertEqual(stock['foreign']['net'], 6000)
+        self.assertEqual(update.security_code('00981a'), '00981A')
+
     def test_refuse_changed_schema(self):
         with self.assertRaises(ValueError):
             update.institutions({'stat':'OK','fields':['證券代號','證券名稱'],'data':[['2330','台積電']]},'2026-09-15')
@@ -44,6 +52,9 @@ class TestTWSE(unittest.TestCase):
             'high': 125, 'low': 118.5, 'close': 124.5
         })
 
+        payload['tables'][0]['data'].append(['00981A', '主動統一台股增長', '2,000,000', '20', '21', '19.5', '20.5'])
+        self.assertEqual(update.all_market_rows(payload, '2026-09-17')['00981A']['close'], 20.5)
+
     def test_five_watchlist_pages(self):
         pages = update.load_watchlist()
         self.assertEqual(len(pages), 5)
@@ -64,6 +75,24 @@ class TestTWSE(unittest.TestCase):
         self.assertLess(update.news_score('War attack triggers market crisis'), 0)
         self.assertGreater(update.news_score('Rate cut fuels market rally and growth'), 0)
         self.assertEqual(update.news_score('Company holds annual meeting'), 0)
+
+    def test_global_market_indicators_include_nasdaq_and_sox(self):
+        indicators = dict(update.GLOBAL_MARKET_INDICATORS)
+        self.assertEqual(indicators['^IXIC'], '那斯達克綜合指數')
+        self.assertEqual(indicators['^SOX'], '費城半導體指數')
+        self.assertEqual(len(update.GLOBAL_MARKET_INDICATORS), 5)
+
+    def test_global_market_indicator_uses_cached_value_on_single_fetch_failure(self):
+        previous = {'indicators': [{'symbol': '^SOX', 'name': '舊名稱', 'change_pct': 1.25}]}
+        original = update.market_indicator
+        update.market_indicator = lambda symbol, name: (_ for _ in ()).throw(ValueError('offline'))
+        try:
+            indicators = update.fetch_market_indicators(previous)
+        finally:
+            update.market_indicator = original
+        sox = next(item for item in indicators if item['symbol'] == '^SOX')
+        self.assertEqual(sox['name'], '費城半導體指數')
+        self.assertTrue(sox['stale'])
 
     def test_us_holidays_and_risk_blocks(self):
         holidays = update.us_holidays(2026)
@@ -106,7 +135,7 @@ class TestTWSE(unittest.TestCase):
         ]}]}
         rows = update.tpex_daily_rows(payload, '2026-09-21')
         self.assertEqual(rows['5274']['close'], 15000)
-        self.assertNotIn('00679B', rows)
+        self.assertEqual(rows['00679B']['close'], 30)
 
     def test_tpex_company_profiles(self):
         rows = [{'SecuritiesCompanyCode':'5274','CompanyName':'信驊科技股份有限公司',

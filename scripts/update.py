@@ -28,6 +28,12 @@ TPEX_INSTI = 'https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade'
 YAHOO_CHART = 'https://query1.finance.yahoo.com/v8/finance/chart/'
 GOOGLE_NEWS = 'https://news.google.com/rss/search'
 TAIFEX_QUOTES = 'https://mis.taifex.com.tw/futures/api/getQuoteList'
+SECURITY_CODE_PATTERN = re.compile(r'\d{4,6}[A-Z]?')
+
+
+def security_code(value):
+    code = label(value).upper()
+    return code if SECURITY_CODE_PATTERN.fullmatch(code) else None
 
 POSITIVE_NEWS = ('上漲', '走高', '降息', '寬鬆', '成長', '優於預期', '突破', '創高', '和平', '停火',
                  'rally', 'gain', 'rate cut', 'growth', 'beats', 'ceasefire', 'peace')
@@ -149,8 +155,8 @@ def institutions(payload, day=None):
     for row in payload['data']:
         if len(row) <= max(ci, ni):
             continue
-        code = label(row[ci])
-        if not re.fullmatch(r'\d{4,6}', code):
+        code = security_code(row[ci])
+        if not code:
             continue
         foreign = {
             'buy': value(row, fields, ('外陸資', '買進')),
@@ -215,8 +221,8 @@ def company_profiles(payload):
     for row in payload:
         if not isinstance(row, dict):
             continue
-        code = str(row.get('公司代號', '')).strip()
-        if not re.fullmatch(r'\d{4,6}', code):
+        code = security_code(row.get('公司代號', ''))
+        if not code:
             continue
         industry_code = str(row.get('產業別', '')).strip().zfill(2)
         industry, generic = INDUSTRY_BUSINESS.get(industry_code, ('其他業', '多元產品製造或專業服務'))
@@ -247,8 +253,8 @@ def tpex_company_profiles(payload):
     for row in payload:
         if not isinstance(row, dict):
             continue
-        code = str(row.get('SecuritiesCompanyCode') or '').strip()
-        if not re.fullmatch(r'\d{4}', code):
+        code = security_code(row.get('SecuritiesCompanyCode') or '')
+        if not code or not re.fullmatch(r'\d{4}', code):
             continue
         industry_code = str(row.get('SecuritiesIndustryCode') or '').strip().zfill(2)
         industry, generic = INDUSTRY_BUSINESS.get(industry_code, ('其他業', '多元產品製造或專業服務'))
@@ -280,8 +286,8 @@ def tpex_institutions(payload, day=None):
     for row in tables[0]['data']:
         if len(row) < 24:
             continue
-        code = str(row[0]).strip()
-        if not re.fullmatch(r'\d{4}', code):
+        code = security_code(row[0])
+        if not code:
             continue
         foreign = {'buy': number(row[2]), 'sell': number(row[3]), 'net': number(row[4])}
         trust = {'buy': number(row[11]), 'sell': number(row[12]), 'net': number(row[13])}
@@ -309,8 +315,8 @@ def tpex_daily_rows(payload, day):
         raise ValueError('TPEx daily quote columns changed')
     result = {}
     for row in table.get('data') or []:
-        code = str(row[indexes['code']]).strip()
-        if not re.fullmatch(r'\d{4}', code):
+        code = security_code(row[indexes['code']])
+        if not code:
             continue
         parsed = {'date': day}
         parsed.update({key: number(row[idx]) for key, idx in indexes.items() if key != 'code'})
@@ -371,8 +377,8 @@ def all_market_rows(payload, day):
             continue
         result = {}
         for row in table.get('data') or []:
-            code = label(row[required['code']])
-            if not re.fullmatch(r'\d{4,6}', code):
+            code = security_code(row[required['code']])
+            if not code:
                 continue
             parsed = {'date': day}
             parsed.update({key: number(row[idx]) for key, idx in required.items() if key != 'code'})
@@ -545,14 +551,37 @@ def risk_block(news, category, words):
     return {'level': level, 'points': points, 'impact': -min(15, points * 2), 'headlines': len(selected)}
 
 
-def fetch_global_context(now):
+GLOBAL_MARKET_INDICATORS = [
+    ('^GSPC', 'S&P 500'),
+    ('^IXIC', '那斯達克綜合指數'),
+    ('^DJI', '道瓊工業指數'),
+    ('^SOX', '費城半導體指數'),
+    ('^VIX', 'VIX恐慌指數'),
+]
+
+
+def fetch_market_indicators(previous=None):
     indicators = []
-    for symbol, name in [('^GSPC', 'S&P 500'), ('^IXIC', 'NASDAQ'), ('^DJI', '道瓊'), ('^VIX', 'VIX恐慌指數')]:
+    previous_indicators = {
+        item.get('symbol'): item for item in (previous or {}).get('indicators', [])
+        if item.get('symbol')
+    }
+    for symbol, name in GLOBAL_MARKET_INDICATORS:
         try:
             indicators.append(market_indicator(symbol, name))
         except Exception as exc:
             print(f'{name}: {exc}')
+            cached = previous_indicators.get(symbol)
+            if cached:
+                cached = dict(cached)
+                cached.update({'name': name, 'stale': True})
+                indicators.append(cached)
         time.sleep(0.2)
+    return indicators
+
+
+def fetch_global_context(now, previous=None):
+    indicators = fetch_market_indicators(previous)
 
     topics = [
         ('全球市場', '台股 美股 半導體 全球股市 when:1d'),
@@ -617,7 +646,7 @@ def fetch_global_context(now):
     return {'updated_at': now.isoformat(timespec='seconds'), 'buy_percent': buy, 'sell_percent': 100 - buy,
             'holiday_factor': holiday, 'holiday_factors': holiday_factors, 'indicators': indicators, 'news': news[:16],
             'risk_analysis': {'global_war': war, 'taiwan_strait': strait},
-            'method': '美股指數日變動、VIX、美台假日、全球戰爭與台海新聞關鍵字之規則式評分'}
+            'method': 'S&P 500、那斯達克、道瓊、費城半導體、VIX、美台假日、全球戰爭與台海新聞關鍵字之規則式評分'}
 
 
 def fetch_stock_news(codes, profiles, stocks, now, previous=None):
@@ -679,8 +708,8 @@ def load_watchlist():
     for index, page in enumerate(pages[:10], 1):
         if not isinstance(page, dict):
             continue
-        codes = [str(code).strip() for code in page.get('codes', [])
-                 if re.fullmatch(r'\d{4,6}', str(code).strip())]
+        codes = [normalized for code in page.get('codes', [])
+                 if (normalized := security_code(code))]
         clean.append({
             'title': str(page.get('title') or f'自選股第{index}頁')[:30],
             'subtitle': str(page.get('subtitle') or '每頁最多10支股票')[:60],
@@ -696,6 +725,7 @@ def main():
     histories = old.get('price_history', {})
     price_sessions = set(old.get('all_price_sessions', []))
     otc_price_sessions = set(old.get('otc_price_sessions', []))
+    alpha_price_sessions = set(old.get('twse_alpha_sessions', []))
     target = now.date()
     changed = False
 
@@ -751,6 +781,50 @@ def main():
             changed = True
         except Exception as exc:
             print(f'OpenAPI quote/PE unavailable: {exc}; institution data preserved')
+
+    # Older versions discarded TWSE product codes with an alphabetic suffix
+    # (for example active ETF 00981A). Backfill both institution flows and
+    # OHLC prices once, then maintain the completed-session marker normally.
+    def fetch_twse_alpha_day(iso):
+        flow_rows, price_rows_for_day, errors = {}, {}, []
+        try:
+            parsed = institutions(http_json(T86, {
+                'date': iso.replace('-', ''), 'selectType': 'ALLBUT0999', 'response': 'json'
+            }), iso)
+            flow_rows = {code: row for code, row in parsed.items() if re.search(r'[A-Z]$', code)}
+        except Exception as exc:
+            errors.append(f'institutions: {exc}')
+        try:
+            parsed = all_market_rows(http_json(MI_INDEX, {
+                'date': iso.replace('-', ''), 'type': 'ALLBUT0999', 'response': 'json'
+            }), iso)
+            price_rows_for_day = {code: row for code, row in parsed.items() if re.search(r'[A-Z]$', code)}
+        except Exception as exc:
+            errors.append(f'prices: {exc}')
+        return iso, flow_rows, price_rows_for_day, errors
+
+    alpha_tasks = [iso for iso in sorted(days)[-60:] if iso not in alpha_price_sessions]
+    if alpha_tasks:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            for iso, alpha_flows, alpha_prices, errors in pool.map(fetch_twse_alpha_day, alpha_tasks):
+                if alpha_flows:
+                    for stock in alpha_flows.values():
+                        stock['market'] = '上市'
+                    days[iso].update(alpha_flows)
+                    changed = True
+                if alpha_prices:
+                    for code, row in alpha_prices.items():
+                        merged = {item['date']: item for item in histories.get(code, [])}
+                        merged[iso] = row
+                        histories[code] = [merged[key] for key in sorted(merged)[-80:]]
+                        if iso == latest and code in days[iso]:
+                            days[iso][code]['quote'] = row
+                    changed = True
+                if not errors:
+                    alpha_price_sessions.add(iso)
+                print(f'{iso}: {len(alpha_flows)} alpha-code flows, {len(alpha_prices)} alpha-code prices')
+                for error in errors:
+                    print(f'{iso} TWSE alpha {error}')
 
     # Backfill and maintain TPEx institution flows and all-market OHLC history.
     # Four workers keep the first migration practical without sending a large
@@ -813,6 +887,24 @@ def main():
         except Exception as exc:
             print(f'TPEx PE unavailable: {exc}')
 
+    # Funds and other exchange products are not part of the listed-company
+    # registry. Build a concise fallback profile from the official daily data.
+    if latest:
+        for code, stock in days[latest].items():
+            if code in profiles:
+                continue
+            name = str(stock.get('name') or code).strip()
+            is_fund = code.startswith(('00', '01', '02'))
+            profiles[code] = {
+                'name': name, 'full_name': name,
+                'industry': 'ETF／ETN' if is_fund else '其他有價證券',
+                'business': ('主動式 ETF，由投信團隊依公開說明書進行選股與資產配置'
+                             if code.endswith('A') else
+                             '交易所掛牌基金或指數型商品，追蹤標的與持股請以公開說明書為準'
+                             if is_fund else '交易所掛牌有價證券'),
+                'market': stock.get('market', '上市'),
+            }
+
     watchlist_pages = load_watchlist()
     try:
         night_futures = fetch_taifex_night(now)
@@ -821,7 +913,7 @@ def main():
         print(f'TAIFEX night quote unavailable: {exc}')
         night_futures = old.get('night_futures', {})
     try:
-        global_context = fetch_global_context(now)
+        global_context = fetch_global_context(now, old.get('global_context'))
         changed = True
     except Exception as exc:
         print(f'Global context unavailable: {exc}')
@@ -861,11 +953,12 @@ def main():
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.4.7',
+        'version': '2.4.9',
         'days': {key: days[key] for key in sorted(days)[-100:]},
         'price_history': histories,
         'all_price_sessions': sorted(price_sessions)[-80:],
         'otc_price_sessions': sorted(otc_price_sessions)[-80:],
+        'twse_alpha_sessions': sorted(alpha_price_sessions)[-80:],
         'watchlist_pages': watchlist_pages,
         'company_profiles': profiles,
         'night_futures': night_futures,
