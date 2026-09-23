@@ -225,6 +225,17 @@ main {
   margin: 15px 0 8px;
   white-space: nowrap;
 }
+.card .closepe { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; white-space: normal; }
+.closepe .metricpart { display: inline-flex; align-items: baseline; gap: 7px; }
+.closepe .metricpart small { color: #91a8c0; font-size: 12px; font-weight: 650; }
+.closepe .metricpart b { color: #edf5ff; font-size: clamp(19px, 2vw, 29px); white-space: nowrap; }
+.closepe .metricpart b.flat { color: #efc96f; }
+.closepe .metricdivider { color: #647d96; font-size: 19px; }
+@media (max-width: 610px) {
+  .card .closepe { gap: 5px; }
+  .closepe .metricpart { gap: 5px; }
+  .closepe .metricdivider { font-size: 15px; }
+}
 .sub,
 .hint,
 .gaugelegend {
@@ -568,6 +579,9 @@ footer {
 .watchlist .watchcode { display: block; color: #6ee1c1; font-size: 12px; margin: 0 0 4px; }
 .watchlist strong, .watchlist small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .watchlist small { color: #8fa7bd; margin-top: 7px; }
+.watchlist .watchquote { display: flex; flex-wrap: wrap; gap: 4px 9px; overflow: visible; white-space: normal; }
+.watchlist .watchquote span { margin-left: 0; white-space: nowrap; }
+.watchlist .watchquote .flat { color: #efc96f; }
 .blocktitle { margin: 32px 0 13px; padding-left: 13px; border-left: 4px solid var(--mint); }
 .blocktitle h2 { font-size: 25px; }
 .columns.nomargin, .full.nomargin { margin-top: 0; }
@@ -731,6 +745,10 @@ footer {
 .editorhelp { color: var(--muted); font-size: 13px; line-height: 1.6; }
 .editorpages { display: grid; gap: 12px; margin: 18px 0; }
 .editorpage { padding: 16px; border: 1px solid #304963; border-radius: 13px; background: #111f32; }
+.editorpageorder { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.editorpageorder strong { color: #77e0c5; font-size: 12px; }
+.editorpageorder > div { display: flex; gap: 6px; }
+.editorpageorder button { padding: 6px 9px; font-size: 12px; }
 .editorpagehead { display: grid; grid-template-columns: 1fr 1.4fr auto; gap: 9px; align-items: end; }
 .editorpage label { display: grid; gap: 6px; color: #91a8c0; font-size: 11px; }
 .editorpage input {
@@ -740,8 +758,11 @@ footer {
 .editorpage input:focus { outline: 2px solid var(--mint); }
 .deletepage { color: #ff9ba4 !important; border-color: #70434c !important; }
 .editorcodes { display: flex; flex-wrap: wrap; gap: 7px; margin: 13px 0 10px; }
-.editorchip { display: inline-flex; align-items: center; gap: 7px; padding: 7px 9px; border: 1px solid #36516c; border-radius: 20px; color: #d6e4f1; background: #0c1929; font-size: 12px; }
-.editorchip button { border: 0; padding: 0; color: #ff929c; background: transparent; font-size: 17px; line-height: 1; }
+.editorchip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 7px 6px 10px; border: 1px solid #36516c; border-radius: 20px; color: #d6e4f1; background: #0c1929; font-size: 12px; }
+.chipactions { display: inline-flex; align-items: center; gap: 2px; }
+.editorchip .chipactions button { min-width: 27px; min-height: 27px; border: 0; padding: 2px; color: #8fe6cf; background: #13283d; font-size: 14px; line-height: 1; }
+.editorchip .chipactions .removechip { color: #ff929c; font-size: 17px; }
+.watcheditor button:disabled { cursor: default; opacity: .3; border-color: #34465a; }
 .addstock { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .editorbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; position: sticky; bottom: -22px; padding: 13px 0 2px; background: #0d1929; }
 .editorspacer { flex: 1; }
@@ -772,6 +793,8 @@ footer {
   .watchlist small { font-size: 10px; }
   .watcheditor { padding: 16px; }
   .editorpagehead { grid-template-columns: 1fr; }
+  .editorcodes { display: grid; grid-template-columns: 1fr; }
+  .editorchip { justify-content: space-between; border-radius: 11px; }
   .deletepage { justify-self: start; }
   .editorbar { bottom: -16px; }
   .editorspacer { display: none; }
