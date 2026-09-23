@@ -1,4 +1,4 @@
-/* TWSE + TPEx Flow v2.4.11 — colored close price and clearer P/E display. */
+/* TWSE + TPEx Flow v2.4.12 — post-close retries and full-width watch status colors. */
 const $ = id => document.getElementById(id);
 let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0, institutionDate = null;
 let watchPagesData = [], editingPages = [];
@@ -270,9 +270,8 @@ function renderWatchlist(){
     const business=profile.business||profile.industry||'公司業務資料更新中';
     const changePct=Number.isFinite(price)&&Number.isFinite(previous)&&previous!==0?(price/previous-1)*100:null;
     const priceClass=Number.isFinite(changePct)?(changePct>0?'pos':changePct<0?'neg':'flat'):'';
-    const netClass=Number.isFinite(net)?(net>0?'pos':net<0?'neg':'flat'):'';
     const priceText=Number.isFinite(price)?fmt(price)+' 元'+(Number.isFinite(changePct)?' ('+(changePct>0?'+':'')+fmt(changePct)+'%)':''):'等待資料';
-    return '<button data-watch="'+escape(code)+'" class="'+(code===selected?'active':'')+'"><span class="watchcode">'+escape(code)+'</span><strong>'+escape(stock?.name||profile.name||'尚無名稱')+'</strong><small class="watchbusiness">'+escape(business)+'</small><small class="watchquote"><span class="'+priceClass+'">'+escape(priceText)+'</span>'+(Number.isFinite(net)?'<span class="'+netClass+'">外資 '+lots(net)+'</span>':'')+'</small></button>';
+    return '<button data-watch="'+escape(code)+'" class="'+(code===selected?'active':'')+'"><span class="watchcode">'+escape(code)+'</span><strong>'+escape(stock?.name||profile.name||'尚無名稱')+'</strong><small class="watchbusiness">'+escape(business)+'</small><small class="watchquote '+priceClass+'"><span>'+escape(priceText)+'</span>'+(Number.isFinite(net)?'<span>外資 '+lots(net)+'</span>':'')+'</small></button>';
   }).join('')||'<div class="editornote">這個分類尚未加入股票，請點「編輯」。</div>';
 }
 function renderStockQuick(code){
@@ -402,7 +401,7 @@ function render(){
 
 async function load(){
   $('status').textContent='正在載入證交所盤後資料…';
-  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.4.11');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
+  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;$('stamp').textContent='最近交易日 '+market.latest_session+' · v'+(market.version||'2.4.12');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
   catch(e){if($('stamp'))$('stamp').textContent='尚未取得資料';if($('content'))$('content').hidden=true;if($('status'))$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
 }
 
@@ -428,3 +427,5 @@ $('watchEditor').addEventListener('click',e=>{if(e.target===$('watchEditor'))clo
 document.querySelectorAll('[data-rank]').forEach(b=>b.addEventListener('click',()=>{rankSide=b.dataset.rank;document.querySelectorAll('[data-rank]').forEach(x=>x.classList.toggle('active',x===b));rank();}));
 $('ranking').addEventListener('click',e=>{const row=e.target.closest('[data-code]');if(row){selected=row.dataset.code;render();scrollTo({top:0,behavior:'smooth'});}});
 load();
+setInterval(()=>{if(!$('watchEditor').open)load();},15*60*1000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!$('watchEditor').open)load();});

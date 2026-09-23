@@ -579,9 +579,18 @@ footer {
 .watchlist .watchcode { display: block; color: #6ee1c1; font-size: 12px; margin: 0 0 4px; }
 .watchlist strong, .watchlist small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .watchlist small { color: #8fa7bd; margin-top: 7px; }
-.watchlist .watchquote { display: flex; flex-wrap: wrap; gap: 4px 9px; overflow: visible; white-space: normal; }
-.watchlist .watchquote span { margin-left: 0; white-space: nowrap; }
-.watchlist .watchquote .flat { color: #efc96f; }
+.watchlist .watchquote {
+  display: flex; flex-wrap: wrap; gap: 4px 9px; overflow: visible; white-space: normal;
+  margin: 10px -12px -12px; padding: 8px 12px 10px; border-bottom: 4px solid #806b3d;
+  border-radius: 0 0 10px 10px; background: #806b3d22;
+}
+.watchlist .watchquote span { margin-left: 0; color: #efc96f; white-space: nowrap; }
+.watchlist .watchquote.pos { border-bottom-color: var(--red); background: #ff6f7d18; }
+.watchlist .watchquote.pos span { color: var(--red) !important; }
+.watchlist .watchquote.neg { border-bottom-color: var(--mint); background: #37d4aa18; }
+.watchlist .watchquote.neg span { color: var(--mint) !important; }
+.watchlist .watchquote.flat { border-bottom-color: #efc96f; background: #efc96f18; }
+.watchlist .watchquote.flat span { color: #efc96f !important; }
 .blocktitle { margin: 32px 0 13px; padding-left: 13px; border-left: 4px solid var(--mint); }
 .blocktitle h2 { font-size: 25px; }
 .columns.nomargin, .full.nomargin { margin-top: 0; }
@@ -791,6 +800,7 @@ footer {
   .watchheading { margin-top: 16px; }
   .watchlist button { padding: 10px; }
   .watchlist small { font-size: 10px; }
+  .watchlist .watchquote { margin: 9px -10px -10px; padding: 7px 10px 9px; }
   .watcheditor { padding: 16px; }
   .editorpagehead { grid-template-columns: 1fr; }
   .editorcodes { display: grid; grid-template-columns: 1fr; }
