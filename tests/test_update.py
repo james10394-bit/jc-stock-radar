@@ -31,6 +31,22 @@ class TestTWSE(unittest.TestCase):
         self.assertEqual(data['dealer']['net'],-2500)
         self.assertEqual(sum(data[x]['net'] for x in ('foreign','trust','dealer')),4500)
 
+    def test_foreign_holding_rows_support_twse_and_tpex(self):
+        twse = update.foreign_holding_rows({
+            'date':'20261016',
+            'fields':['證券代號','證券名稱','全體外資及陸資持有股數','外資及陸資尚可投資比率','全體外資及陸資持股比率'],
+            'data':[['2330','台積電','18,000,000,000','30.50','69.50']]
+        }, '上市', '2026-10-16')['2330']
+        tpex = update.foreign_holding_rows({'tables':[{
+            'date':'115/10/16',
+            'fields':['排行','代號','名稱','發行股數(A)','僑外資及陸資持有股數(C)','僑外資及陸資尚可投資比率(D=B/A)','僑外資及陸資持股比率(E=C/A)'],
+            'data':[['1','5274','信驊','40,000,000','12,000,000','70%','30%']]
+        }]}, '上櫃', '2026-10-16')['5274']
+        self.assertEqual(twse['ratio'], 69.5)
+        self.assertEqual(twse['shares'], 18000000000)
+        self.assertEqual(tpex['ratio'], 30)
+        self.assertEqual(tpex['date'], '2026-10-16')
+
     def test_alphanumeric_security_code(self):
         fields = ['證券代號','證券名稱','外陸資買進股數(不含外資自營商)','外陸資賣出股數(不含外資自營商)','外陸資買賣超股數(不含外資自營商)','投信買進股數','投信賣出股數','投信買賣超股數','自營商買進股數','自營商賣出股數','自營商買賣超股數']
         row = ['00981A','主動統一台股增長','10000','4000','6000','2000','1000','1000','500','300','200']
@@ -156,6 +172,18 @@ class TestTWSE(unittest.TestCase):
         self.assertEqual(profile['market'], '上櫃')
         self.assertEqual(profile['listed'], '2013-04-30')
         self.assertIn('伺服器管理晶片', profile['business'])
+
+    def test_financial_records_supports_twse_and_tpex_fields(self):
+        twse = update.financial_records([
+            {'公司代號':'2330','年度':'115','季別':'3','基本每股盈餘':'42.50'}
+        ], '上市')['2330']
+        otc = update.financial_records([
+            {'SecuritiesCompanyCode':'5274','Year':'115','Season':'2','BasicEarningsPerShare':'55.25'}
+        ], '上櫃')['5274']
+        self.assertEqual(twse['eps'], 42.5)
+        self.assertEqual(twse['period'], '115Q3')
+        self.assertEqual(otc['eps'], 55.25)
+        self.assertEqual(otc['period'], '115Q2')
 
 
 if __name__ == '__main__':

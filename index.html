@@ -7,11 +7,11 @@
   <meta name="description" content="整合上市與上櫃三大法人、KD、布林通道、均線與支撐壓力的台股研究工具。">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2312b89a'/%3E%3Cpath d='M12 42l12-13 9 8 19-22v12L34 48l-10-9-12 13z' fill='white'/%3E%3C/svg%3E">
   <title>台股法人技術分析站</title>
-  <link rel="stylesheet" href="style.css?v=2.4.13">
+  <link rel="stylesheet" href="style.css?v=2.5.1">
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE＋TPEx FLOW · v2.4.13 當日收盤獨立更新版</small></div></div>
+  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE＋TPEx FLOW · v2.5.1 續抱出場分析版</small></div></div>
   <a href="https://www.twse.com.tw/" target="_blank" rel="noopener">官方資料：臺灣證券交易所 ↗</a>
 </header>
 <main>
@@ -57,13 +57,30 @@
       <label class="datechooser">法人資料日期<select id="institutionDate" aria-label="選擇法人資料日期"></select><span id="dateBadge" hidden></span></label>
     </div>
     <div class="sectiontitle blocktitle"><div class="eyebrow">法人核心數字</div><h2>法人籌碼總覽</h2></div>
-    <div class="metrics five">
+    <div class="metrics six">
       <article class="card accent"><span>外資當日買賣超</span><strong id="foreignToday">—</strong><div id="foreignSub" class="sub"></div></article>
       <article class="card"><span>外資期間累計</span><strong id="foreignPeriod">—</strong><div id="foreignStreak" class="sub"></div></article>
       <article class="card"><span>投信期間累計</span><strong id="trustPeriod">—</strong><div class="sub">依選取期間統計</div></article>
       <article class="card"><span>自營商期間累計</span><strong id="dealerPeriod">—</strong><div class="sub">自行買賣＋避險</div></article>
       <article class="card"><span>收盤價 · 本益比</span><strong id="closePe" class="closepe">—</strong><div id="closePeDate" class="sub">正在確認當日收盤</div></article>
+      <article class="card"><span>3日大戶持股比例（推估）</span><strong id="largeHolder3d">—</strong><div id="largeHolder3dSub" class="sub">三大法人籌碼推估，非集保實際持股</div></article>
     </div>
+
+    <div class="sectiontitle blocktitle"><div class="eyebrow">基本面 × 同業估值</div><h2>EPS 與公司本益比完整分析</h2></div>
+    <article class="panel fundamentalpanel">
+      <div class="panelhead"><div><h3>盈餘、估值與合理價帶</h3><p>以官方本益比、最新財報累計 EPS 與同產業公司比較；資料不足時明確標示。</p></div><div id="fundamentalRatio"></div></div>
+      <div id="fundamentalStats" class="fundamentalstats"></div>
+      <div id="fundamentalConclusion" class="fundamentalconclusion neutral"></div>
+      <p class="fundamentalnote">近四季 EPS 由「收盤價 ÷ 官方本益比」反推；合理價帶以同產業有效本益比中位數 ±20% 計算，不是目標價或獲利保證。</p>
+    </article>
+
+    <div class="sectiontitle blocktitle"><div class="eyebrow">外資持股 × 籌碼節奏 × 技術確認</div><h2>續抱、減碼與出場判讀</h2></div>
+    <article class="panel holdingpanel">
+      <div class="panelhead"><div><h3>籌碼續抱風險模型</h3><p>外資連買 3 日以上視為籌碼擁擠警示；溫和買超、持股比例高且趨勢健康，才偏向買進或續抱。</p></div><div id="holdingRatio"></div></div>
+      <div id="holdingFactors" class="advisorfactors holdingfactors"></div>
+      <div id="holdingConclusion" class="holdingconclusion neutral"></div>
+      <p class="modeldisclaimer">外資連買不等於一定上漲；持股比率、買超力道、股價是否轉弱及技術面必須一起判讀。此區為規則式風險提示，不是保證獲利的投資建議。</p>
+    </article>
 
     <div class="sectiontitle blocktitle"><div class="eyebrow">規則式策略</div><h2>策略判讀與操作區間</h2></div>
     <div class="columns planrow nomargin">
@@ -87,6 +104,14 @@
       <div class="panelhead"><div><h3>籌碼、趨勢、第一手買點與八分飽紀律</h3><p>依公開操作理念，套用本站客觀數據產生；不是何丞唐顧問本人即時建議。</p></div><div id="advisorRatio"></div></div>
       <div id="advisorFactors" class="advisorfactors"></div>
       <div class="advisornote"><span>方法依據</span><p>深入研究產業、洞悉法人成本、精算籌碼、切入買點，以及八分飽分批落袋。</p><a href="https://www.hwa-guan.com.tw/Wealth/team/Teacher?T_id=17" target="_blank" rel="noopener">查看華冠投顧官方介紹 ↗</a></div>
+    </article>
+
+    <div class="sectiontitle blocktitle modelneighbor"><div class="eyebrow">錄影策略量化</div><h2>郭哲榮投資長公開方法模型</h2></div>
+    <article class="panel guopanel">
+      <div class="panelhead"><div><h3>籌碼 × 相對位階 × 基本面 × 市場心理</h3><p>依公開操作理念與你提供的錄影，將可取得的客觀資料轉成四面檢查。</p></div><div id="guoRatio"></div></div>
+      <div id="guoFactors" class="advisorfactors"></div>
+      <div class="advisornote"><span>模型重點</span><p>低基期與成長並重，檢查 EPS、估值是否預支未來、法人籌碼及趨勢是否互相確認。</p><a href="https://www.morerich.com.tw/teacher-profile-GuoZherong.html" target="_blank" rel="noopener">查看公開介紹 ↗</a></div>
+      <p class="modeldisclaimer">此區為本站依公開操作觀念建立的規則模型，不代表郭哲榮投資長本人即時意見、授權、喊單或個股推薦。</p>
     </article>
 
     <div class="sectiontitle blocktitle modelneighbor"><div class="eyebrow">公開投資觀念量化</div><h2>世界投資大師原則模型</h2></div>
@@ -188,8 +213,8 @@
 </dialog>
 <footer>
   資料取自臺灣證券交易所、證券櫃檯買賣中心公開盤後資料及公開市場／新聞摘要。所有比例均為固定公式評分，不代表上漲機率或獲利保證，僅供研究參考，不構成投資建議。<br>
-  <a href="https://www.twse.com.tw/zh/trading/foreign/t86.html">上市三大法人</a> · <a href="https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html">上櫃三大法人</a> · <a href="https://www.twse.com.tw/zh/trading/historical/bwibbu-day.html">本益比</a> · <a href="https://www.taifex.com.tw/cht/4/aHIntroduction">臺股期貨夜盤</a>
+  <a href="https://www.twse.com.tw/zh/trading/foreign/t86.html">上市三大法人</a> · <a href="https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html">上櫃三大法人</a> · <a href="https://www.twse.com.tw/zh/trading/historical/bwibbu-day.html">本益比</a> · <a href="https://openapi.twse.com.tw/">財報 EPS</a> · <a href="https://www.taifex.com.tw/cht/4/aHIntroduction">臺股期貨夜盤</a>
 </footer>
-<script src="app.js?v=2.4.13" defer></script>
+<script src="app.js?v=2.5.1" defer></script>
 </body>
 </html>

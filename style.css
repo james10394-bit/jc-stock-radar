@@ -248,6 +248,9 @@ main {
 .neg {
   color: var(--mint) !important;
 }
+.card strong.flat {
+  color: #efc96f !important;
+}
 .columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -685,6 +688,34 @@ footer {
 @media (max-width: 850px) { .advisorfactors { grid-template-columns: repeat(2, 1fr); } .advisornote { grid-template-columns: 1fr; } }
 @media (max-width: 610px) { .advisorfactors { grid-template-columns: 1fr; } }
 
+.fundamentalpanel { border-color: #4b6174; background: linear-gradient(145deg, #142943, #101d2f); }
+.fundamentalstats { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 9px; }
+.fundamentalstats > div { min-width: 0; display: grid; gap: 8px; padding: 14px; border: 1px solid #344b63; border-radius: 11px; background: #0c1929; }
+.fundamentalstats span,.fundamentalstats small { color: var(--muted); font-size: 11px; }
+.fundamentalstats strong { font-size: 17px; line-height: 1.35; overflow-wrap: anywhere; }
+.fundamentalconclusion { margin-top: 12px; padding: 15px; border: 1px solid #806b3d; border-radius: 11px; background: #322b1b; }
+.fundamentalconclusion > strong { color: #efc96f; }
+.fundamentalconclusion.bull { border-color: #984b55; background: #311b27; }
+.fundamentalconclusion.bull > strong { color: #ff929c; }
+.fundamentalconclusion.bear { border-color: #32816e; background: #164039; }
+.fundamentalconclusion.bear > strong { color: #69e4c1; }
+.fundamentalconclusion ul { margin: 9px 0 0; padding-left: 20px; color: #c4d3e0; font-size: 12px; line-height: 1.7; }
+.fundamentalnote,.modeldisclaimer { margin-top: 12px !important; padding-top: 11px; border-top: 1px solid #33475e; color: var(--muted) !important; font-size: 11px !important; }
+.holdingpanel { border-color: #4b6174; background: linear-gradient(145deg, #14263d, #101d2f); }
+.holdingconclusion { margin-top: 12px; padding: 16px; display: grid; grid-template-columns: minmax(190px,.42fr) 1fr auto; gap: 18px; align-items: center; border: 1px solid #806b3d; border-radius: 12px; background: #322b1b; }
+.holdingconclusion div span,.holdingconclusion small { display: block; color: var(--muted); font-size: 11px; }
+.holdingconclusion div strong { display: block; margin-top: 5px; color: #efc96f; font-size: 21px; }
+.holdingconclusion p { color: #d6e0e9; font-size: 13px; }
+.holdingconclusion.bull { border-color: #984b55; background: #311b27; }
+.holdingconclusion.bull div strong { color: #ff929c; }
+.holdingconclusion.bear { border-color: #32816e; background: #164039; }
+.holdingconclusion.bear div strong { color: #69e4c1; }
+.holdingfactors .advisorfactor strong { font-size: 12px; }
+@media (max-width: 700px) { .holdingconclusion { grid-template-columns: 1fr; gap: 8px; } }
+.guopanel { border-color: #6a4e57; background: linear-gradient(145deg, #271f29, #111d2d); }
+@media (max-width: 1100px) { .fundamentalstats { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+@media (max-width: 700px) { .fundamentalstats { grid-template-columns: 1fr; } }
+
 /* v2.4.0 — desktop right rail, mobile watch drawer and browser-side editor */
 .workspace {
   display: grid;
@@ -812,7 +843,8 @@ footer {
 }
 
 /* v2.4.2 — prevent right-rail overlap, night market and industry models */
-.analysiscol .metrics.five { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.analysiscol .metrics.five,
+.analysiscol .metrics.six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .analysiscol .card { min-width: 0; }
 .analysiscol .card strong {
   white-space: normal;
@@ -853,12 +885,14 @@ footer {
 .masterdisclaimer { margin-top: 14px !important; padding-top: 13px; border-top: 1px solid #33475e; font-size: 11px !important; }
 @media (max-width: 1180px) { .mastergrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 900px) {
-  .analysiscol .metrics.five { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .analysiscol .metrics.five,
+  .analysiscol .metrics.six { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .nightrow { grid-template-columns: 1fr; }
   .mastergrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 610px) {
-  .analysiscol .metrics.five { grid-template-columns: 1fr; }
+  .analysiscol .metrics.five,
+  .analysiscol .metrics.six { grid-template-columns: 1fr; }
   .nightquote { align-items: start; }
   .nightstats, .industrystats { grid-template-columns: 1fr; }
   .mastergrid { grid-template-columns: 1fr; }

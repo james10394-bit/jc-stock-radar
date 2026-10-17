@@ -18,13 +18,19 @@ WATCHLIST = ROOT / 'data' / 'watchlist.json'
 RISK_CONFIG = ROOT / 'data' / 'risk_config.json'
 TAIPEI = ZoneInfo('Asia/Taipei')
 T86 = 'https://www.twse.com.tw/rwd/zh/fund/T86'
+TWSE_FOREIGN_HOLDING = 'https://www.twse.com.tw/rwd/zh/fund/MI_QFIIS'
 QUOTES = 'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL'
 PE = 'https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_d'
 COMPANY_INFO = 'https://openapi.twse.com.tw/v1/opendata/t187ap03_L'
+TWSE_INCOME_ENDPOINTS = tuple(
+    f'https://openapi.twse.com.tw/v1/opendata/t187ap06_L_{suffix}'
+    for suffix in ('ci', 'fh', 'ins', 'bd', 'mim', 'basi')
+)
 MI_INDEX = 'https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX'
 TPEX_OPENAPI = 'https://www.tpex.org.tw/openapi/v1/'
 TPEX_DAILY = 'https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes'
 TPEX_INSTI = 'https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade'
+TPEX_FOREIGN_HOLDING = 'https://www.tpex.org.tw/www/zh-tw/insti/qfii'
 YAHOO_CHART = 'https://query1.finance.yahoo.com/v8/finance/chart/'
 GOOGLE_NEWS = 'https://news.google.com/rss/search'
 TAIFEX_QUOTES = 'https://mis.taifex.com.tw/futures/api/getQuoteList'
@@ -207,6 +213,44 @@ def institutions(payload, day=None):
     return result
 
 
+def foreign_holding_rows(payload, market_name, day=None):
+    """Normalize official TWSE/TPEx foreign ownership statistics by stock."""
+    if not isinstance(payload, dict):
+        return {}
+    if isinstance(payload.get('tables'), list) and payload['tables']:
+        table = payload['tables'][0]
+        fields, rows = table.get('fields') or [], table.get('data') or []
+        report_day = date_string(table.get('date')) or day
+    else:
+        fields, rows = payload.get('fields') or [], payload.get('data') or []
+        report_day = date_string(payload.get('date')) or day
+    ci = field_index(fields, include=('代號',))
+    ri = field_index(fields, include=('持股比率',))
+    hi = field_index(fields, include=('持有股數',))
+    ai = field_index(fields, include=('尚可投資比率',))
+    if ci is None or ri is None:
+        raise ValueError(f'{market_name} foreign-holding columns changed')
+    result = {}
+    for row in rows:
+        if not isinstance(row, list) or len(row) <= max(ci, ri):
+            continue
+        code = security_code(row[ci])
+        ratio_value = number(str(row[ri]).replace('%', ''))
+        if not code or ratio_value is None:
+            continue
+        result[code] = {
+            'ratio': ratio_value,
+            'shares': number(row[hi]) if hi is not None and hi < len(row) else None,
+            'available_ratio': (number(str(row[ai]).replace('%', ''))
+                                if ai is not None and ai < len(row) else None),
+            'date': report_day,
+            'market': market_name,
+        }
+    if not result:
+        raise ValueError(f'No {market_name} foreign-holding rows returned')
+    return result
+
+
 def rows_by_code(payload):
     if not isinstance(payload, list):
         raise ValueError('Expected an array from TWSE OpenAPI')
@@ -272,6 +316,61 @@ def tpex_company_profiles(payload):
         }
     if not result:
         raise ValueError('No TPEx company profiles returned')
+    return result
+
+
+def financial_records(payload, market_name):
+    """Normalize the latest cumulative EPS from MOPS income-statement rows."""
+    if not isinstance(payload, list):
+        raise ValueError('Expected financial statement array')
+    result = {}
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        code = security_code(row.get('公司代號') or row.get('SecuritiesCompanyCode') or row.get('Code') or '')
+        if not code:
+            continue
+        eps = None
+        preferred = ('基本每股盈餘', '基本每股盈餘元', 'BasicEarningsPerShare', 'BasicEPS', 'EPS')
+        for key in preferred:
+            if key in row:
+                eps = number(row.get(key))
+                if eps is not None:
+                    break
+        if eps is None:
+            for key, raw in row.items():
+                normalized = label(key).lower()
+                if ('每股盈餘' in normalized or 'earningspershare' in normalized or normalized == 'eps') and '稀釋' not in normalized:
+                    eps = number(raw)
+                    if eps is not None:
+                        break
+        if eps is None:
+            continue
+        year = str(row.get('年度') or row.get('Year') or '').strip()
+        season = str(row.get('季別') or row.get('Season') or row.get('Quarter') or '').strip()
+        period = ''.join(x for x in (year, ('Q' + re.sub(r'\D', '', season)) if season else '') if x)
+        result[code] = {'eps': eps, 'period': period or '最新累計財報', 'market': market_name}
+    return result
+
+
+def fetch_financials(previous=None):
+    """Fetch current cumulative EPS for all TWSE/TPEx statement industries."""
+    result = dict(previous or {})
+    endpoints = [(url, '上市') for url in TWSE_INCOME_ENDPOINTS]
+    endpoints += [(TPEX_OPENAPI + 'mopsfin_t187ap06_O_' + suffix, '上櫃')
+                  for suffix in ('ci', 'fh', 'ins', 'bd', 'mim', 'basi')]
+    successes = 0
+    for url, market_name in endpoints:
+        try:
+            rows = financial_records(http_json(url), market_name)
+            if rows:
+                result.update(rows)
+                successes += 1
+        except Exception as exc:
+            print(f'{market_name} EPS unavailable ({url.rsplit("/", 1)[-1]}): {exc}')
+        time.sleep(0.2)
+    if not successes and not result:
+        raise ValueError('No EPS financial statements available')
     return result
 
 
@@ -789,6 +888,35 @@ def main():
     except Exception as exc:
         print(f'TPEx company profiles unavailable: {exc}')
 
+    try:
+        financials = fetch_financials(old.get('financials'))
+        changed = True
+    except Exception as exc:
+        print(f'EPS financial statements unavailable: {exc}')
+        financials = old.get('financials', {})
+
+    foreign_holdings = dict(old.get('foreign_holdings', {}))
+    holding_successes = 0
+    holding_day = latest or target.isoformat()
+    try:
+        foreign_holdings.update(foreign_holding_rows(http_json(TWSE_FOREIGN_HOLDING, {
+            'date': holding_day.replace('-', ''), 'selectType': 'ALLBUT0999', 'response': 'json'
+        }), '上市', holding_day))
+        holding_successes += 1
+        changed = True
+    except Exception as exc:
+        print(f'TWSE foreign holdings unavailable: {exc}')
+    try:
+        foreign_holdings.update(foreign_holding_rows(http_json(TPEX_FOREIGN_HOLDING, {
+            'date': holding_day.replace('-', '/'), 'response': 'json'
+        }), '上櫃', holding_day))
+        holding_successes += 1
+        changed = True
+    except Exception as exc:
+        print(f'TPEx foreign holdings unavailable: {exc}')
+    foreign_holding_updated_at = (now.isoformat(timespec='seconds') if holding_successes
+                                  else old.get('foreign_holding_updated_at'))
+
     # Closing prices are published before institution reports. Fetch them
     # independently so today's close is not blocked by a delayed T86 file.
     if target.weekday() < 5 and (now.hour > 13 or (now.hour == 13 and now.minute >= 35)):
@@ -1001,7 +1129,7 @@ def main():
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.4.13',
+        'version': '2.5.1',
         'days': {key: days[key] for key in sorted(days)[-100:]},
         'price_history': histories,
         'all_price_sessions': sorted(price_sessions)[-80:],
@@ -1009,6 +1137,9 @@ def main():
         'twse_alpha_sessions': sorted(alpha_price_sessions)[-80:],
         'watchlist_pages': watchlist_pages,
         'company_profiles': profiles,
+        'financials': financials,
+        'foreign_holdings': foreign_holdings,
+        'foreign_holding_updated_at': foreign_holding_updated_at,
         'night_futures': night_futures,
         'global_context': global_context,
         'stock_news': stock_news,

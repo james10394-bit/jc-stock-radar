@@ -1,5 +1,6 @@
-/* TWSE + TPEx Flow v2.4.13 — independent same-day closing-price snapshot. */
+/* TWSE + TPEx Flow v2.5.1 — hold/trim/exit and foreign-ownership model. */
 const $ = id => document.getElementById(id);
+const APP_VERSION = '2.5.1';
 let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0, institutionDate = null;
 let watchPagesData = [], editingPages = [];
 const WATCH_STORAGE_KEY = 'jc-stock-radar-watchlists-v1';
@@ -13,11 +14,28 @@ const current = () => market?.days?.[institutionDate||market?.latest_session]||l
 const flows = code => days().map(date=>({date:date,...market.days[date][code]})).filter(x=>x.foreign);
 const prices = code => (market.price_history?.[code]||[]).filter(x=>['open','high','low','close'].every(k=>Number.isFinite(x[k])));
 const latestClose = code => {
-  const snapshot=market?.latest_quotes,quote=snapshot?.quotes?.[code];
-  return quote&&Number.isFinite(quote.close)?{...quote,date:snapshot.date}:null;
+  const snapshot=market?.latest_quotes,quote=snapshot?.quotes?.[code],history=prices(code),recent=last(history),prior=history.at(-2);
+  if(quote&&Number.isFinite(quote.close)&&(!recent?.date||snapshot.date>=recent.date))return {...quote,date:snapshot.date};
+  if(recent&&Number.isFinite(recent.close)){
+    const previousClose=Number(prior?.close),change=Number.isFinite(previousClose)?recent.close-previousClose:null;
+    return {...recent,previous_close:previousClose,change,change_pct:Number.isFinite(change)&&previousClose?change/previousClose*100:null};
+  }
+  return null;
 };
 const last = a => a[a.length-1];
 const sumNet = (a,key='foreign') => a.reduce((s,x)=>s+(Number(x[key]?.net)||0),0);
+const median = values => {const a=values.filter(Number.isFinite).sort((x,y)=>x-y);if(!a.length)return null;const i=Math.floor(a.length/2);return a.length%2?a[i]:(a[i-1]+a[i])/2;};
+function largeHolderRatio3d(code,flowRows){
+  const volumeByDate=new Map(prices(code).map(row=>[row.date,Number(row.volume)]));
+  let net=0,volume=0,count=0;
+  for(const row of flowRows.slice(-3)){
+    const dailyVolume=volumeByDate.get(row.date);
+    if(!Number.isFinite(dailyVolume)||dailyVolume<=0)continue;
+    net+=(Number(row.foreign?.net)||0)+(Number(row.trust?.net)||0)+(Number(row.dealer?.net)||0);
+    volume+=dailyVolume;count++;
+  }
+  return count&&volume>0?{ratio:net/volume*100,net,volume,count}:null;
+}
 const sma = (a,n) => a.length>=n?a.slice(-n).reduce((s,x)=>s+x,0)/n:null;
 function std(a,n){if(a.length<n)return null;const v=a.slice(-n),m=sma(v,n);return Math.sqrt(v.reduce((s,x)=>s+(x-m)**2,0)/n);}
 function tick(n){if(!Number.isFinite(n))return null;const t=n<10?.01:n<50?.05:n<100?.1:n<500?.5:n<1000?1:5;return Math.round(n/t)*t;}
@@ -149,6 +167,129 @@ function renderAdvisor(a,flowRows){
   if(!view){$('advisorRatio').innerHTML=ratioBadge({buy:50,sell:50});$('advisorFactors').innerHTML='<div class="advisor-empty">歷史資料滿20個交易日後產生。</div>';return;}
   $('advisorRatio').innerHTML=ratioBadge(view);
   $('advisorFactors').innerHTML=view.factors.map(([name,text,state])=>'<div class="advisorfactor '+state+'"><span>'+escape(name)+'</span><strong>'+escape(text)+'</strong></div>').join('');
+}
+
+function fundamentalAnalysis(code,price,pe,industry){
+  const report=market.financials?.[code]||{},epsReported=Number(report.eps),epsTtm=price>0&&pe>0?price/pe:null;
+  const peers=Object.entries(market.company_profiles||{}).filter(([peer,p])=>peer!==code&&p.industry===industry.industry).map(([peer])=>Number(latestMarket()[peer]?.pe)).filter(x=>x>0&&x<200);
+  const peerPe=median(peers),anchor=Number.isFinite(peerPe)?peerPe:null;
+  const fairLow=epsTtm>0&&anchor>0?epsTtm*anchor*.8:null,fairHigh=epsTtm>0&&anchor>0?epsTtm*anchor*1.2:null;
+  let points=0;const reasons=[];
+  if(epsTtm>0){points+=12;reasons.push('近四季 EPS 為正');}else if(Number.isFinite(epsTtm)){points-=28;reasons.push('近四季 EPS 非正值');}else reasons.push('近四季 EPS 無法計算');
+  if(Number.isFinite(epsReported)){if(epsReported>0){points+=8;reasons.push('最新累計 EPS 為正');}else{points-=15;reasons.push('最新累計 EPS 為負');}}
+  if(pe>0&&anchor>0){const relative=pe/anchor;if(relative<=.85){points+=22;reasons.push('本益比低於同業中位數');}else if(relative>=1.15){points-=22;reasons.push('本益比高於同業中位數');}else{points+=4;reasons.push('本益比接近同業中位數');}}
+  else if(!(pe>0))reasons.push('虧損或官方未提供本益比');
+  if(price>0&&fairLow>0&&fairHigh>0){if(price<fairLow){points+=15;reasons.push('股價低於同業估值帶');}else if(price>fairHigh){points-=18;reasons.push('股價高於同業估值帶');}else reasons.push('股價位於同業估值帶內');}
+  const view=ratio(points/2),state=view.buy>=60?'bull':view.buy<=40?'bear':'neutral';
+  return {report,epsReported,epsTtm,pe,peerPe,peerCount:peers.length,fairLow,fairHigh,reasons,state,...view};
+}
+function renderFundamentals(code,price,pe,industry){
+  const view=fundamentalAnalysis(code,price,pe,industry),period=view.report.period||'最新財報';
+  $('fundamentalRatio').innerHTML=ratioBadge(view);
+  const stats=[
+    ['近四季 EPS',Number.isFinite(view.epsTtm)?fmt(view.epsTtm)+' 元':'無法計算','由收盤價／本益比反推'],
+    ['最新累計 EPS',Number.isFinite(view.epsReported)?fmt(view.epsReported)+' 元':'尚無資料',period],
+    ['公司本益比',view.pe>0?fmt(view.pe)+' 倍':'不適用','官方盤後資料'],
+    ['同業本益比中位數',view.peerPe>0?fmt(view.peerPe)+' 倍':'樣本不足',view.peerCount+' 家有效樣本'],
+    ['同業估值參考帶',view.fairLow>0&&view.fairHigh>0?fmt(view.fairLow)+'～'+fmt(view.fairHigh)+' 元':'暫無法估算','同業中位數 ±20%']
+  ];
+  $('fundamentalStats').innerHTML=stats.map(([label,value,note])=>'<div><span>'+escape(label)+'</span><strong>'+escape(value)+'</strong><small>'+escape(note)+'</small></div>').join('');
+  $('fundamentalConclusion').className='fundamentalconclusion '+view.state;
+  $('fundamentalConclusion').innerHTML='<strong>'+(view.state==='bull'?'估值偏有利':view.state==='bear'?'估值風險偏高':'估值中性／資料待確認')+'</strong><ul>'+view.reasons.map(x=>'<li>'+escape(x)+'</li>').join('')+'</ul>';
+  return view;
+}
+
+function foreignStreak(flowRows){
+  const latest=last(flowRows),sign=Math.sign(Number(latest?.foreign?.net)||0);
+  if(!sign)return {days:0,side:'flat'};
+  let count=0;
+  for(const row of [...flowRows].reverse()){
+    if(Math.sign(Number(row.foreign?.net)||0)!==sign)break;
+    count++;
+  }
+  return {days:count,side:sign>0?'buy':'sell'};
+}
+
+function holdingDecision(code,a,flowRows){
+  if(!a||!flowRows.length)return null;
+  const latest=last(flowRows),streak=foreignStreak(flowRows),holding=market.foreign_holdings?.[code]||{};
+  const holdingRatio=Number(holding.ratio),priceRows=prices(code),quote=last(priceRows),prior=priceRows.at(-2);
+  const volume=Number(quote?.volume),foreignNet=Number(latest.foreign?.net)||0;
+  const netVolumePct=volume>0?foreignNet/volume*100:null;
+  const mildBuy=foreignNet>0&&Number.isFinite(netVolumePct)&&netVolumePct<=.5;
+  const highHolding=Number.isFinite(holdingRatio)&&holdingRatio>=20;
+  const mediumHolding=Number.isFinite(holdingRatio)&&holdingRatio>=8;
+  const priceWeak=!!(quote&&prior&&quote.close<prior.close)||a.quote.close<a.ind.ma20;
+  const trendHealthy=a.quote.close>=a.ind.ma20&&a.ind.ma5>=a.ind.ma10&&(a.macd?.currentHist??0)>=0;
+  const overheated=a.ind.k>=80||a.quote.close>=a.sellLow||a.quote.close>a.ind.upper;
+  const crowded=streak.side==='buy'&&streak.days>=3;
+  const heavySell=foreignNet<0&&Number.isFinite(netVolumePct)&&netVolumePct<=-.5;
+  const breakdown=a.quote.close<a.ind.ma20&&a.quote.close<=a.rawSupport*1.01;
+  const factors=[];
+  if(crowded)factors.push(['外資連續性','⚠️ 已連續 '+streak.days+' 日買超，籌碼擁擠與追高風險升高','neutral']);
+  else if(streak.side==='buy')factors.push(['外資連續性','連續 '+streak.days+' 日買超，尚未達 3 日警戒門檻','bull']);
+  else if(streak.side==='sell')factors.push(['外資連續性','連續 '+streak.days+' 日賣超，籌碼轉弱','bear']);
+  else factors.push(['外資連續性','當日外資買賣超接近零','neutral']);
+  if(mildBuy)factors.push(['買超力道','溫和買超 '+fmt(netVolumePct,2)+'% 成交量，籌碼較不躁進','bull']);
+  else if(foreignNet>0)factors.push(['買超力道','買超占成交量 '+fmt(netVolumePct,2)+'%，需留意短線集中','neutral']);
+  else if(foreignNet<0)factors.push(['買超力道','賣超占成交量 '+fmt(Math.abs(netVolumePct),2)+'%，承接力轉弱','bear']);
+  else factors.push(['買超力道','外資淨額為零','neutral']);
+  if(highHolding)factors.push(['外資持股比例',fmt(holdingRatio,2)+'%，屬高持股區','bull']);
+  else if(mediumHolding)factors.push(['外資持股比例',fmt(holdingRatio,2)+'%，屬中度持股','neutral']);
+  else if(Number.isFinite(holdingRatio))factors.push(['外資持股比例',fmt(holdingRatio,2)+'%，持股比率偏低','bear']);
+  else factors.push(['外資持股比例','官方資料本次未提供，不以推估值代替','neutral']);
+  if(trendHealthy)factors.push(['股價確認','站上月線、短均線與 MACD 同步偏多','bull']);
+  else if(priceWeak)factors.push(['股價確認','股價轉弱或跌破月線，外資買超需打折解讀','bear']);
+  else factors.push(['股價確認','技術訊號尚未形成一致方向','neutral']);
+
+  let action='等待確認',state='neutral',summary='籌碼與技術面尚未同向，先等下一個交易日確認。',points=0;
+  if(mildBuy&&highHolding)points+=26;else if(foreignNet>0&&mediumHolding)points+=12;
+  if(trendHealthy)points+=18;if(crowded)points-=18;if(streak.days>=5&&streak.side==='buy')points-=10;
+  if(priceWeak&&foreignNet>0)points-=20;if(crowded&&overheated)points-=22;if(heavySell)points-=22;if(breakdown)points-=25;
+  if(heavySell&&breakdown){action='出場優先';state='bear';summary='外資賣壓放大且股價跌破關鍵位置，風險控管優先。';}
+  else if((crowded&&(overheated||priceWeak))||(foreignNet>0&&priceWeak)){action='分批減碼';state='bear';summary='外資雖有買超，但連買過久或股價未同步走強，避免把買超當成保證。';}
+  else if(crowded){action='續抱但提高警戒';state='neutral';summary='已達連買 3 日警戒門檻；可續抱，但不宜追價並應守停損。';}
+  else if(mildBuy&&highHolding&&trendHealthy){action='偏買進／續抱';state='bull';summary='外資持股高、買超溫和且趨勢確認，屬較健康的偏多組合。';}
+  else if(foreignNet>0&&trendHealthy){action='續抱觀察';state='bull';summary='籌碼與趨勢同向，可續抱並觀察是否轉為爆量追價。';}
+  else if((foreignNet<0&&priceWeak)||heavySell){action='減碼觀察';state='bear';summary='外資賣壓偏重或價格同步轉弱，宜降低部位並等待止穩。';}
+  const view=ratio(points/2);
+  return {...view,action,state,summary,factors,holdingRatio,holdingDate:holding.date,streak,netVolumePct};
+}
+
+function renderHoldingDecision(code,a,flowRows){
+  const view=holdingDecision(code,a,flowRows);
+  if(!view){$('holdingRatio').innerHTML=ratioBadge({buy:50,sell:50});$('holdingFactors').innerHTML='<div class="advisor-empty">需累積法人、成交量與至少20個交易日技術資料。</div>';$('holdingConclusion').className='holdingconclusion neutral';$('holdingConclusion').innerHTML='<strong>資料不足</strong>';return;}
+  $('holdingRatio').innerHTML=ratioBadge(view);
+  $('holdingFactors').innerHTML=view.factors.map(([name,text,state])=>'<div class="advisorfactor '+state+'"><span>'+escape(name)+'</span><strong>'+escape(text)+'</strong></div>').join('');
+  $('holdingConclusion').className='holdingconclusion '+view.state;
+  $('holdingConclusion').innerHTML='<div><span>系統判讀</span><strong>'+escape(view.action)+'</strong></div><p>'+escape(view.summary)+'</p><small>'+(Number.isFinite(view.holdingRatio)?'外資持股資料日 '+escape(view.holdingDate||'最近更新'):'本次無實際持股比率')+'</small>';
+}
+
+function guoModel(a,flowRows,industry,fundamental){
+  if(!a)return null;
+  let points=0;const factors=[],flow5=sumNet(flowRows.slice(-5)),flow20=sumNet(flowRows.slice(-20));
+  if(flow5>0&&flow20>0){points+=23;factors.push(['籌碼與相對點位','外資短中期同步買超','bull']);}
+  else if(flow5<0&&flow20<0){points-=23;factors.push(['籌碼與相對點位','外資短中期同步賣超','bear']);}
+  else factors.push(['籌碼與相對點位','法人方向尚未一致','neutral']);
+  const rows=prices(selected),high60=rows.length?Math.max(...rows.slice(-60).map(x=>x.high)):null,fromHigh=high60>0?(a.quote.close/high60-1)*100:null;
+  if(a.quote.close>a.ind.ma20&&a.macd?.currentHist>0){points+=20;factors.push(['技術線與循環','站上月線且 MACD 多方','bull']);}
+  else if(a.quote.close<a.ind.ma20&&a.macd?.currentHist<0){points-=20;factors.push(['技術線與循環','跌破月線且 MACD 空方','bear']);}
+  else factors.push(['技術線與循環','趨勢訊號互有矛盾','neutral']);
+  if(fundamental.epsTtm>0&&fundamental.peerPe>0&&fundamental.pe<=fundamental.peerPe){points+=24;factors.push(['EPS 與估值','EPS 為正且本益比不高於同業','bull']);}
+  else if(!(fundamental.epsTtm>0)||fundamental.pe>fundamental.peerPe*1.2){points-=24;factors.push(['EPS 與估值','獲利不足或估值已明顯偏高','bear']);}
+  else factors.push(['EPS 與估值','獲利為正，估值接近同業','neutral']);
+  const lowBase=Number.isFinite(fromHigh)&&fromHigh<=-12;
+  if(lowBase&&industry.buy>=55){points+=18;factors.push(['低基期高成長','距60日高點逾12%，產業仍偏強','bull']);}
+  else if(Number.isFinite(fromHigh)&&fromHigh>-3&&a.ind.k>80){points-=16;factors.push(['市場心理與追價','接近波段高點且 KD 過熱','bear']);}
+  else factors.push(['市場心理與追價','未出現明顯低基期或過熱條件','neutral']);
+  const view=ratio(points/2);
+  return {...view,factors};
+}
+function renderGuo(a,flowRows,industry,fundamental){
+  const view=guoModel(a,flowRows,industry,fundamental);
+  if(!view){$('guoRatio').innerHTML=ratioBadge({buy:50,sell:50});$('guoFactors').innerHTML='<div class="advisor-empty">歷史資料滿20個交易日後產生。</div>';return;}
+  $('guoRatio').innerHTML=ratioBadge(view);
+  $('guoFactors').innerHTML=view.factors.map(([name,text,state])=>'<div class="advisorfactor '+state+'"><span>'+escape(name)+'</span><strong>'+escape(text)+'</strong></div>').join('');
 }
 
 function industryAnalysis(code){
@@ -390,9 +531,25 @@ function render(){
   const f=stock.foreign,period=Number($('period').value),allFlows=flows(selected),availableFlows=allFlows.filter(x=>x.date<=(institutionDate||market.latest_session)),periodRows=availableFlows.slice(-period);
   setValue('foreignToday',lots(f.net),f.net);$('foreignSub').textContent='買進 '+lots(f.buy).replace('+','')+' ｜ 賣出 '+lots(f.sell).replace('+','');
   setValue('foreignPeriod',lots(sumNet(periodRows)),sumNet(periodRows));setValue('trustPeriod',lots(sumNet(periodRows,'trust')),sumNet(periodRows,'trust'));setValue('dealerPeriod',lots(sumNet(periodRows,'dealer')),sumNet(periodRows,'dealer'));
+  const largeHolder3d=largeHolderRatio3d(selected,availableFlows),largeHolderEl=$('largeHolder3d');
+  largeHolderEl.classList.remove('pos','neg','flat');
+  if(largeHolder3d){
+    const ratio3d=largeHolder3d.ratio;
+    largeHolderEl.textContent=(ratio3d>0?'+':'')+fmt(ratio3d,2)+'%';
+    largeHolderEl.classList.add(ratio3d>0?'pos':ratio3d<0?'neg':'flat');
+    $('largeHolder3dSub').textContent=largeHolder3d.count+'個交易日 · 法人淨買賣超 ÷ 成交量';
+  }else{
+    largeHolderEl.textContent='資料不足';
+    $('largeHolder3dSub').textContent='需有近3日法人與成交量資料';
+  }
   let streak=0;for(const row of [...availableFlows].reverse()){if(!row.foreign.net||Math.sign(row.foreign.net)!==Math.sign(f.net))break;streak++;}
   $('foreignStreak').textContent=periodRows.length+'個交易日 · '+(streak?'連續'+streak+'日'+(f.net>0?'買超':'賣超'):'無連續訊號');
   const priceRows=prices(selected),a=analyze(priceRows,availableFlows),fresh=latestClose(selected),price=fresh?.close??last(priceRows)?.close??latestStock.quote?.close,pe=latestStock.pe;
+  if(a&&largeHolder3d){
+    if(largeHolder3d.ratio>=1){a.score++;a.reasons.push('近3日大戶籌碼比例偏多');}
+    else if(largeHolder3d.ratio<=-1){a.score--;a.reasons.push('近3日大戶籌碼比例偏空');}
+    else a.reasons.push('近3日大戶籌碼比例接近中性');
+  }
   const previousClose=fresh?.previous_close??(priceRows.length>1?priceRows[priceRows.length-2]?.close:null);
   const closeClass=Number.isFinite(price)&&Number.isFinite(previousClose)?(price>previousClose?'pos':price<previousClose?'neg':'flat'):'';
   $('closePe').className='closepe';
@@ -401,12 +558,12 @@ function render(){
   $('details').innerHTML=[['外資及陸資',f],['投信',stock.trust],['自營商',stock.dealer]].map(([name,x])=>'<tr><td>'+name+'</td><td>'+lots(x.buy).replace('+','')+'</td><td>'+lots(x.sell).replace('+','')+'</td><td class="'+color(x.net)+'">'+lots(x.net)+'</td></tr>').join('');
   const total=f.buy+f.sell,ratio=Number.isFinite(total)&&total>0?f.buy/total:null;$('gaugeFill').style.width=ratio===null?'0%':(ratio*100).toFixed(1)+'%';$('gaugeText').innerHTML=ratio===null?'買賣分項不足':'<span>買進 '+fmt(ratio*100)+'%</span><span>賣出 '+fmt((1-ratio)*100)+'%</span>';
   $('kd').textContent=a?'K '+fmt(a.ind.k,1)+' / D '+fmt(a.ind.d,1):'—';$('boll').textContent=a?fmt(a.ind.lower)+' / '+fmt(a.ind.middle)+' / '+fmt(a.ind.upper):'—';$('ma').textContent=a?'MA5 '+fmt(a.ind.ma5)+' · MA10 '+fmt(a.ind.ma10)+' · MA20 '+fmt(a.ind.ma20):'—';
-  flowChart(periodRows);technicalChart(priceRows,a);renderMacd(priceRows,a?.macd);renderPlan(a);renderAdvice(a);renderAdvisor(a,availableFlows);const industry=renderIndustry(selected);renderNight();renderMasters(a,availableFlows,industry);renderGlobal();renderWatchlist();rank();
+  flowChart(periodRows);technicalChart(priceRows,a);renderMacd(priceRows,a?.macd);renderPlan(a);renderAdvice(a);renderHoldingDecision(selected,a,availableFlows);renderAdvisor(a,availableFlows);const industry=renderIndustry(selected);const fundamental=renderFundamentals(selected,price,Number(pe),industry);renderGuo(a,availableFlows,industry,fundamental);renderNight();renderMasters(a,availableFlows,industry);renderGlobal();renderWatchlist();rank();
 }
 
 async function load(){
   $('status').textContent='正在載入證交所盤後資料…';
-  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;$('stamp').textContent='法人 '+market.latest_session+(market.latest_quotes?.date?' · 收盤 '+market.latest_quotes.date:'')+' · v'+(market.version||'2.4.13');const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
+  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;const closeDate=market.latest_quotes?.date>=market.latest_session?market.latest_quotes.date:market.latest_session;$('stamp').textContent='法人 '+market.latest_session+' · 收盤 '+closeDate+' · v'+APP_VERSION;const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!latestMarket()[selected])selected=first||Object.keys(latestMarket())[0];render();}
   catch(e){if($('stamp'))$('stamp').textContent='尚未取得資料';if($('content'))$('content').hidden=true;if($('status'))$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
 }
 
