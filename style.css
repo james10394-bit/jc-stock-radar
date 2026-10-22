@@ -767,6 +767,7 @@ footer {
 .watchlist button { width: 100%; }
 .watchlist .watchcode { margin-left: 0; }
 
+.data-incomplete > :not(.stockheading):not(#incompleteStock) { display: none !important; }
 .watcheditor {
   width: min(820px, calc(100% - 28px));
   max-height: min(820px, calc(100vh - 28px));
@@ -787,6 +788,7 @@ footer {
 .editorpage { padding: 16px; border: 1px solid #304963; border-radius: 13px; background: #111f32; }
 .editorpageorder { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .editorpageorder strong { color: #77e0c5; font-size: 12px; }
+.editorpagelabel { display: flex; align-items: center; gap: 9px; }
 .editorpageorder > div { display: flex; gap: 6px; }
 .editorpageorder button { padding: 6px 9px; font-size: 12px; }
 .editorpagehead { display: grid; grid-template-columns: 1fr 1.4fr auto; gap: 9px; align-items: end; }
@@ -797,8 +799,22 @@ footer {
 }
 .editorpage input:focus { outline: 2px solid var(--mint); }
 .deletepage { color: #ff9ba4 !important; border-color: #70434c !important; }
-.editorcodes { display: flex; flex-wrap: wrap; gap: 7px; margin: 13px 0 10px; }
-.editorchip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 7px 6px 10px; border: 1px solid #36516c; border-radius: 20px; color: #d6e4f1; background: #0c1929; font-size: 12px; }
+.editorcodes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin: 13px 0 10px; }
+.editorchip { position: relative; display: grid; grid-template-columns: auto minmax(62px,auto) minmax(0,1fr) auto; align-items: center; gap: 8px; min-width: 0; padding: 6px 7px; border: 1px solid #36516c; border-radius: 12px; color: #d6e4f1; background: #0c1929; font-size: 12px; }
+.editorstockname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.draghandle { touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.draghandle:active { cursor: grabbing; }
+.watcheditor .draghandle { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 34px; min-height: 31px; padding: 3px 7px; color: #78dfc5; background: #102a40; border-color: #2d526b; }
+.draghandle > span { font-size: 20px; line-height: 1; }
+.draghandle small { font-size: 9px; white-space: nowrap; }
+.codedrag small { display: none; }
+.editorpage.dragging,.editorchip.dragging { opacity: .48; border-color: var(--mint); }
+.editorpage.drag-before { box-shadow: 0 -4px 0 var(--mint); }
+.editorpage.drag-after { box-shadow: 0 4px 0 var(--mint); }
+.editorchip.drag-before::before,.editorchip.drag-after::after { content: ""; position: absolute; left: 7px; right: 7px; height: 3px; border-radius: 3px; background: var(--mint); box-shadow: 0 0 10px #48caaa; }
+.editorchip.drag-before::before { top: -6px; }
+.editorchip.drag-after::after { bottom: -6px; }
+body.watch-drag-active { cursor: grabbing; }
 .chipactions { display: inline-flex; align-items: center; gap: 2px; }
 .editorchip .chipactions button { min-width: 27px; min-height: 27px; border: 0; padding: 2px; color: #8fe6cf; background: #13283d; font-size: 14px; line-height: 1; }
 .editorchip .chipactions .removechip { color: #ff929c; font-size: 17px; }
@@ -834,8 +850,10 @@ footer {
   .watchlist .watchquote { margin: 9px -10px -10px; padding: 7px 10px 9px; }
   .watcheditor { padding: 16px; }
   .editorpagehead { grid-template-columns: 1fr; }
-  .editorcodes { display: grid; grid-template-columns: 1fr; }
-  .editorchip { justify-content: space-between; border-radius: 11px; }
+  .editorcodes { grid-template-columns: 1fr; }
+  .editorchip { grid-template-columns: auto 88px minmax(0,1fr) auto; min-height: 58px; border-radius: 11px; }
+  .codedrag small { display: inline; }
+  .watcheditor .codedrag { min-width: 62px; }
   .deletepage { justify-self: start; }
   .editorbar { bottom: -16px; }
   .editorspacer { display: none; }

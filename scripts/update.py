@@ -3,6 +3,10 @@
 import datetime as dt
 import concurrent.futures
 import json
+import csv
+import io
+import html
+import subprocess
 import os
 import re
 import time
@@ -149,6 +153,8 @@ def value(row, fields, include, exclude=()):
 
 def institutions(payload, day=None):
     if not isinstance(payload, dict) or payload.get('stat') != 'OK':
+        return {}
+    if day and payload.get('date') and date_string(payload['date']) != day:
         return {}
     fields = payload.get('fields') or []
     if not fields or not isinstance(payload.get('data'), list):
@@ -382,6 +388,9 @@ def tpex_institutions(payload, day=None):
     if not tables or not isinstance(tables[0].get('data'), list):
         return {}
     result = {}
+    response_date = tables[0].get('date') or payload.get('date')
+    if day and response_date and date_string(response_date) != day:
+        return {}
     for row in tables[0]['data']:
         if len(row) < 24:
             continue
@@ -419,6 +428,10 @@ def tpex_daily_rows(payload, day):
             continue
         parsed = {'date': day}
         parsed.update({key: number(row[idx]) for key, idx in indexes.items() if key != 'code'})
+        if '漲跌' in fields:
+            change = number(row[fields.index('漲跌')])
+            if change is not None and parsed.get('close') is not None:
+                parsed['previous_close'] = parsed['close'] - change
         if all(parsed[x] is not None for x in ('open', 'high', 'low', 'close')):
             result[code] = parsed
     return result
@@ -839,6 +852,66 @@ def load_watchlist():
     return clean
 
 
+def isin_registry(text):
+    """Official active security roster, independent of daily institution flows."""
+    result = {}
+    for row in re.findall(r'<tr\b[^>]*>(.*?)</tr>', text, re.I | re.S):
+        cells = [html.unescape(re.sub(r'<[^>]+>', '', c)).strip()
+                 for c in re.findall(r'<td\b[^>]*>(.*?)</td>', row, re.I | re.S)]
+        if len(cells) < 6:
+            continue
+        match = re.match(r'^(\d{4,6}[A-Z]?)\s+(.+)$', cells[0])
+        if not match or cells[3] not in ('上市', '上櫃', '興櫃'):
+            continue
+        # Exclude warrants/bonds; include ordinary/preferred stocks and ETFs.
+        if not cells[5].startswith(('ES', 'EP', 'CE', 'CI')):
+            continue
+        result[match[1]] = {'name': match[2], 'market': cells[3],
+                            'listed': cells[2].replace('/', '-'), 'industry': cells[4]}
+    return result
+
+
+def official_bytes(url):
+    """Bound the entire transfer, not only each socket read."""
+    return subprocess.run(['curl', '--fail', '--location', '--silent', '--show-error',
+                           '--max-time', '35', '--user-agent', 'Mozilla/5.0', url],
+                          capture_output=True, check=True, timeout=40).stdout
+
+
+def fetch_security_registry(previous=None):
+    result = dict(previous or {})
+    for mode in (2, 4, 5):
+        try:
+            url = f'https://isin.twse.com.tw/isin/C_public.jsp?strMode={mode}'
+            parsed = isin_registry(official_bytes(url).decode('big5', errors='replace'))
+            if not parsed:
+                raise ValueError('empty official roster')
+            market_name = {2: '上市', 4: '上櫃', 5: '興櫃'}[mode]
+            result = {k: v for k, v in result.items() if v.get('market') != market_name}
+            result.update(parsed)
+        except Exception as exc:
+            print(f'Security registry {mode}: {exc}; previous records retained')
+    return result
+
+
+def fetch_otc_profiles(previous=None):
+    result = dict(previous or {})
+    try:
+        result.update(tpex_company_profiles(json.loads(official_bytes(TPEX_OPENAPI + 'mopsfin_t187ap03_O'))))
+    except Exception as exc:
+        print(f'TPEx profile API: {exc}; trying official CSV')
+        request = urllib.request.Request('https://mopsfin.twse.com.tw/opendata/t187ap03_O.csv', headers={'User-Agent': 'Mozilla/5.0'})
+        try:
+            rows = list(csv.DictReader(io.StringIO(official_bytes(request.full_url).decode('utf-8-sig'))))
+            parsed = company_profiles(rows)
+            for item in parsed.values():
+                item['market'] = '上櫃'
+            result.update(parsed)
+        except Exception as fallback_exc:
+            print(f'TPEx profile CSV: {fallback_exc}; previous records retained')
+    return result
+
+
 def main():
     now = dt.datetime.now(TAIPEI)
     old = json.loads(OUT.read_text(encoding='utf-8')) if OUT.exists() else {}
@@ -861,14 +934,16 @@ def main():
     for ago in range(lookback, -1, -1):
         day = target - dt.timedelta(days=ago)
         iso = day.isoformat()
-        if day.weekday() >= 5 or iso in days or (ago == 0 and now.hour < 18):
+        if day.weekday() >= 5 or (iso in days and ago != 0) or (ago == 0 and now.hour * 60 + now.minute < 13 * 60 + 35):
             continue
         try:
             parsed = institutions(http_json(T86, {'date': day.strftime('%Y%m%d'), 'selectType': 'ALLBUT0999', 'response': 'json'}), iso)
             if parsed:
                 for stock in parsed.values():
                     stock['market'] = '上市'
-                days[iso] = parsed
+                existing = days.setdefault(iso, {})
+                for code, stock in parsed.items():
+                    existing[code] = {**existing.get(code, {}), **stock}
                 changed = True
                 print(f'{iso}: {len(parsed)} securities')
         except Exception as exc:
@@ -877,16 +952,20 @@ def main():
 
     latest = max(days) if days else None
     try:
-        profiles = company_profiles(http_json(COMPANY_INFO))
+        profiles = dict(old.get('company_profiles', {}))
+        profiles.update(company_profiles(http_json(COMPANY_INFO)))
         changed = True
     except Exception as exc:
         print(f'Company profiles unavailable: {exc}')
         profiles = old.get('company_profiles', {})
     try:
-        profiles.update(tpex_company_profiles(http_json(TPEX_OPENAPI + 'mopsfin_t187ap03_O')))
+        profiles = fetch_otc_profiles(profiles)
         changed = True
     except Exception as exc:
         print(f'TPEx company profiles unavailable: {exc}')
+    registry = fetch_security_registry(old.get('security_registry'))
+    for code, item in registry.items():
+        profiles.setdefault(code, item)
 
     try:
         financials = fetch_financials(old.get('financials'))
@@ -1028,8 +1107,9 @@ def main():
     otc_tasks = []
     for iso in sorted(days)[-60:]:
         has_flow = any(stock.get('market') == '上櫃' for stock in days[iso].values())
-        if not has_flow or iso not in otc_price_sessions:
-            otc_tasks.append((iso, not has_flow, iso not in otc_price_sessions))
+        retry_today = iso == target.isoformat() and now.hour * 60 + now.minute >= 13 * 60 + 35
+        if not has_flow or retry_today or iso not in otc_price_sessions:
+            otc_tasks.append((iso, not has_flow or retry_today, iso not in otc_price_sessions))
     if otc_tasks:
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
             for iso, otc_flows, otc_prices, errors in pool.map(fetch_otc_day, otc_tasks):
@@ -1129,7 +1209,8 @@ def main():
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.5.1',
+        'version': '2.5.4',
+        'security_registry': registry,
         'days': {key: days[key] for key in sorted(days)[-100:]},
         'price_history': histories,
         'all_price_sessions': sorted(price_sessions)[-80:],
