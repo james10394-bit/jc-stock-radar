@@ -993,3 +993,21 @@ body.watch-drag-active { cursor: grabbing; }
   .stocktitle-name.name-long { font-size: 16px; }
   .stocktitle-name.name-xlong { font-size: 14px; }
 }
+
+.opening-desk,.position-panel,.risk-guard { padding:22px;border:1px solid #3b526a;border-radius:16px;background:#101f32;margin:18px 0;line-height:1.7; }
+.opening-title { display:flex;align-items:center;justify-content:space-between;gap:12px; }
+.opening-desk h2 { margin:4px 0;font-size:25px; }
+.opening-desk p,.position-panel p,.risk-guard p { color:#a5b9cc;font-size:13px; }
+.opening-picks { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px; }
+.pick-card { min-width:0;border:1px solid #a35b64;border-radius:12px;padding:16px;background:#30232e; }
+.pick-card h3 { margin:7px 0; }.pick-card strong { color:#ff8991;font-size:22px; }
+.pick-card p { overflow-wrap:anywhere; }.pick-card button { color:#e8f2ff;background:transparent;border:0;cursor:pointer;font-size:18px;padding:0; }
+.opening-sectors { display:flex;gap:8px;flex-wrap:wrap;margin-top:15px; }.opening-sectors span { padding:8px 10px;background:#0b1928;border-radius:8px;font-size:12px; }
+.scan-empty { grid-column:1/-1;padding:20px;border:1px dashed #49657e;border-radius:12px;color:#b4c5d5; }
+.risk-guard,.position-panel { grid-column:1/-1;margin:0; }.guard-stop { border-color:#9b8747;background:#29271e; }.guard-pass { border-color:#a55561;background:#2b2029; }
+.risk-guard h3 { margin:0;color:#f0d986; }.guard-pass h3 { color:#ff8e98; }
+.position-inputs { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px; }.position-inputs label { color:#afc3d5;font-size:12px; }
+.position-inputs input { box-sizing:border-box;width:100%;margin-top:5px;background:#081626;border:1px solid #425e79;border-radius:8px;padding:11px;color:#fff; }
+.position-result { padding:12px;background:#0b1724;border-radius:9px; }.position-result.breached { border:2px solid #48caaa;color:#75e8c9; }
+.data-incomplete > #riskGuard { display:block!important; }
+@media(max-width:850px){.opening-picks{grid-template-columns:1fr}.position-inputs{grid-template-columns:1fr}.opening-title{align-items:flex-start;flex-direction:column}.opening-desk{padding:16px}.opening-desk h2{font-size:21px}}

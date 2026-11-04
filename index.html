@@ -7,11 +7,11 @@
   <meta name="description" content="整合上市與上櫃三大法人、KD、布林通道、均線與支撐壓力的台股研究工具。">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2312b89a'/%3E%3Cpath d='M12 42l12-13 9 8 19-22v12L34 48l-10-9-12 13z' fill='white'/%3E%3C/svg%3E">
   <title>台股法人技術分析站</title>
-  <link rel="stylesheet" href="style.css?v=2.5.4">
+  <link rel="stylesheet" href="style.css?v=2.6.0">
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE＋TPEx FLOW · v2.5.4 盤後法人同步整合版</small></div></div>
+  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE＋TPEx FLOW · v2.6.0 開盤觀察與統一風控版</small></div></div>
   <a href="https://www.twse.com.tw/" target="_blank" rel="noopener">官方資料：臺灣證券交易所 ↗</a>
 </header>
 <main>
@@ -25,6 +25,12 @@
     <button id="refresh">重新讀取</button>
   </div>
   <p id="dataFreshness" class="hint" role="status" style="line-height:1.8;margin:12px 0">正在確認法人資料更新狀態…</p>
+  <section class="opening-desk" aria-label="開盤量能觀察">
+    <div class="opening-title"><div><div class="eyebrow">09:00 開盤觀察</div><h2>量能與風控候選 · 最多3檔</h2></div><button type="button" id="liveRefresh">更新盤中快照</button></div>
+    <p id="liveStatus" role="status">正在確認盤中資料…</p><p id="liveSelected"></p>
+    <p>開盤前5分鐘先觀察；約09:05後依實際觀測量篩選。量能比較為「開盤觀測量／前20日平均整日成交量」，不是同時段量比。每個產業最多1檔，符合條件不足3檔時不補滿。</p>
+    <p id="scanSummary"></p><div id="openingPicks" class="opening-picks"></div><div id="openingSectors" class="opening-sectors"></div>
+  </section>
   <div class="workspace">
     <aside class="watchhub" id="watchHub">
       <div class="watchtop">
@@ -41,6 +47,7 @@
       <div id="status" role="status"></div>
 
       <section class="grid" id="content" hidden>
+    <section id="riskGuard" class="risk-guard guard-stop"></section>
     <div class="heading stockheading">
       <div class="stockidentity"><div class="eyebrow">個股完整診斷</div><h2 id="title">—</h2></div>
       <section class="stockquick" aria-label="個股公司資訊與即時新聞">
@@ -58,13 +65,14 @@
       <label class="datechooser">法人資料日期<select id="institutionDate" aria-label="選擇法人資料日期"></select><span id="dateBadge" hidden></span></label>
     </div>
     <div class="sectiontitle blocktitle"><div class="eyebrow">法人核心數字</div><h2>法人籌碼總覽</h2></div>
+    <section class="position-panel"><h3>我的持倉風險 · <span id="positionCode"></span></h3><div class="position-inputs"><label>買進均價（元）<input id="positionCost" type="number" min="0.01" step="0.01" placeholder="實際成本"></label><label>持有股數（1張＝1000股）<input id="positionShares" type="number" min="1" step="1" placeholder="例如5000"></label><label>固定停損（元）<input id="positionStop" type="number" min="0.01" step="0.01" placeholder="自行設定"></label><button type="button" id="positionSave">儲存持倉</button><button type="button" id="positionClear">清除紀錄</button></div><p id="positionResult" class="position-result"></p><p>本機瀏覽器紀錄；非自動下單。固定停損不會隨每日重算向下移；停損價不保證能成交於該價。</p></section>
     <div class="metrics six">
       <article class="card accent"><span>外資當日買賣超</span><strong id="foreignToday">—</strong><div id="foreignSub" class="sub"></div></article>
       <article class="card"><span>外資期間累計</span><strong id="foreignPeriod">—</strong><div id="foreignStreak" class="sub"></div></article>
       <article class="card"><span>投信期間累計</span><strong id="trustPeriod">—</strong><div class="sub">依選取期間統計</div></article>
       <article class="card"><span>自營商期間累計</span><strong id="dealerPeriod">—</strong><div class="sub">自行買賣＋避險</div></article>
       <article class="card"><span>收盤價 · 本益比</span><strong id="closePe" class="closepe">—</strong><div id="closePeDate" class="sub">正在確認當日收盤</div></article>
-      <article class="card"><span>3日大戶持股比例（推估）</span><strong id="largeHolder3d">—</strong><div id="largeHolder3dSub" class="sub">三大法人籌碼推估，非集保實際持股</div></article>
+      <article class="card"><span>3日法人淨買超占成交量</span><strong id="largeHolder3d">—</strong><div id="largeHolder3dSub" class="sub">三大法人籌碼推估，非集保實際持股</div></article>
     </div>
 
     <div class="sectiontitle blocktitle"><div class="eyebrow">基本面 × 同業估值</div><h2>EPS 與公司本益比完整分析</h2></div>
@@ -86,7 +94,7 @@
     <div class="sectiontitle blocktitle"><div class="eyebrow">規則式策略</div><h2>策略判讀與操作區間</h2></div>
     <div class="columns planrow nomargin">
       <article class="panel">
-        <div class="panelhead"><div><h3>分析結論</h3><p>技術面 70%＋全球因素 30% 規則式評分</p></div><div id="overallRatio"></div></div>
+        <div class="panelhead"><div><h3>分析結論</h3><p>資料、獲利、趨勢與停損風險統一檢核</p></div><div id="overallRatio"></div></div>
         <div id="tradePlan" class="signal neutral"></div>
       </article>
       <article class="panel">
@@ -145,7 +153,7 @@
         </div>
       </article>
       <article class="panel indicators">
-        <h3>各項指標買賣比例</h3>
+        <h3>各項指標多空分數</h3>
         <div class="indicatoritem"><span>KD（9,3,3）</span><span id="kdRatio"></span><strong id="kd">—</strong></div>
         <div class="indicatoritem"><span>MACD（12,26,9）</span><span id="macdRatio"></span><strong id="macdValue">—</strong></div>
         <div class="indicatoritem"><span>布林 下／中／上</span><span id="bollRatio"></span><strong id="boll">—</strong></div>
@@ -176,7 +184,7 @@
     <div class="sectiontitle blocktitle"><div class="eyebrow">全球事件風險</div><h2>美股、連假與重大新聞影響</h2></div>
     <div class="columns globalrow nomargin">
       <article class="panel">
-        <div class="panelhead"><div><h3>全球環境買賣比例</h3><p id="globalStamp">讀取中…</p></div><div id="globalRatio"></div></div>
+        <div class="panelhead"><div><h3>全球環境多空分數</h3><p id="globalStamp">讀取中…</p></div><div id="globalRatio"></div></div>
         <div id="globalIndicators" class="globalindicators"></div>
         <div class="holiday"><span>美國／台灣假日與休市分析</span><strong id="holidayFactor">—</strong></div>
         <p class="hint">S&amp;P 500、那斯達克、道瓊、費城半導體、VIX、新聞標題關鍵字與休市風險採固定權重計算。</p>
@@ -216,6 +224,9 @@
   資料取自臺灣證券交易所、證券櫃檯買賣中心公開盤後資料及公開市場／新聞摘要。所有比例均為固定公式評分，不代表上漲機率或獲利保證，僅供研究參考，不構成投資建議。<br>
   <a href="https://www.twse.com.tw/zh/trading/foreign/t86.html">上市三大法人</a> · <a href="https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html">上櫃三大法人</a> · <a href="https://www.twse.com.tw/zh/trading/historical/bwibbu-day.html">本益比</a> · <a href="https://openapi.twse.com.tw/">財報 EPS</a> · <a href="https://www.taifex.com.tw/cht/4/aHIntroduction">臺股期貨夜盤</a>
 </footer>
-<script src="app.js?v=2.5.4" defer></script>
+<script src="risk-engine.js?v=2.6.0" defer></script>
+<script src="intraday-ui.js?v=2.6.0" defer></script>
+<script src="app.js?v=2.6.0" defer></script>
 </body>
 </html>
+

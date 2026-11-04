@@ -15,6 +15,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from zoneinfo import ZoneInfo
+from trading_calendar import fetch_calendar
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'data' / 'market.json'
@@ -930,10 +931,13 @@ def main():
         for stock in stocks.values():
             stock.setdefault('market', '上市')
 
-    lookback = 45 if len(days) < 20 else 7
+    calendar_sessions, calendar_verified_at = fetch_calendar(target, old)
+    lookback = 65
     for ago in range(lookback, -1, -1):
         day = target - dt.timedelta(days=ago)
         iso = day.isoformat()
+        if calendar_verified_at and iso not in calendar_sessions:
+            continue
         if day.weekday() >= 5 or (iso in days and ago != 0) or (ago == 0 and now.hour * 60 + now.minute < 13 * 60 + 35):
             continue
         try:
@@ -1105,8 +1109,8 @@ def main():
         return iso, flow_rows, price_rows_for_day, errors
 
     otc_tasks = []
-    for iso in sorted(days)[-60:]:
-        has_flow = any(stock.get('market') == '上櫃' for stock in days[iso].values())
+    for iso in sorted(set(days) | set(calendar_sessions))[-65:]:
+        has_flow = any(stock.get('market') == '上櫃' for stock in days.get(iso, {}).values())
         retry_today = iso == target.isoformat() and now.hour * 60 + now.minute >= 13 * 60 + 35
         if not has_flow or retry_today or iso not in otc_price_sessions:
             otc_tasks.append((iso, not has_flow or retry_today, iso not in otc_price_sessions))
@@ -1117,7 +1121,7 @@ def main():
                 otc_flows = {code: row for code, row in otc_flows.items() if code in valid_codes}
                 otc_prices = {code: row for code, row in otc_prices.items() if code in valid_codes}
                 if otc_flows:
-                    days[iso].update(otc_flows)
+                    days.setdefault(iso, {}).update(otc_flows)
                     changed = True
                 if otc_prices:
                     for code, row in otc_prices.items():
@@ -1187,13 +1191,17 @@ def main():
     # A single dated MI_INDEX request contains daily OHLC for the whole listed
     # market. This avoids one request per stock and lets every listed security
     # receive KD/Bollinger/support-resistance data after 20 saved sessions.
-    for iso in sorted(days)[-60:]:
-        if iso in price_sessions:
+    for iso in sorted(set(days) | set(calendar_sessions))[-65:]:
+        benchmark_present = any(row.get('date') == iso for row in histories.get('2330', []))
+        if iso in price_sessions and benchmark_present:
             continue
         try:
             parsed = all_market_rows(http_json(MI_INDEX, {
                 'date': iso.replace('-', ''), 'type': 'ALLBUT0999', 'response': 'json'
             }), iso)
+            if not parsed:
+                print(f'{iso}: no official quote rows; session not marked complete')
+                continue
             for code, row in parsed.items():
                 merged = {item['date']: item for item in histories.get(code, [])}
                 merged[iso] = row
@@ -1209,7 +1217,10 @@ def main():
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.5.4',
+        'version': '2.6.0',
+        'trading_sessions': calendar_sessions,
+        'calendar_verified_at': calendar_verified_at,
+        'calendar_month': target.strftime('%Y-%m'),
         'security_registry': registry,
         'days': {key: days[key] for key in sorted(days)[-100:]},
         'price_history': histories,
@@ -1240,3 +1251,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

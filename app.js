@@ -1,8 +1,9 @@
-/* TWSE + TPEx Flow v2.5.4 — mobile pointer drag sorting for watchlists. */
+/* TWSE + TPEx Flow v2.6.0 — mobile pointer drag sorting for watchlists. */
 const $ = id => document.getElementById(id);
-const APP_VERSION = '2.5.4';
+const APP_VERSION = '2.6.0';
 let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0, institutionDate = null;
 let watchPagesData = [], editingPages = [], watchDrag = null;
+let selectedRisk = null;
 const WATCH_STORAGE_KEY = 'jc-stock-radar-watchlists-v1';
 const fmt = (n,digits=2) => Number.isFinite(n) ? new Intl.NumberFormat('zh-TW',{maximumFractionDigits:digits}).format(n) : '—';
 const lots = n => Number.isFinite(n) ? (n>=0?'+':'')+fmt(n/1000)+' 張' : '—';
@@ -45,7 +46,7 @@ function largeHolderRatio3d(code,flowRows){
     net+=(Number(row.foreign?.net)||0)+(Number(row.trust?.net)||0)+(Number(row.dealer?.net)||0);
     volume+=dailyVolume;count++;
   }
-  return count&&volume>0?{ratio:net/volume*100,net,volume,count}:null;
+  return count===3&&volume>0?{ratio:net/volume*100,net,volume,count}:null;
 }
 const sma = (a,n) => a.length>=n?a.slice(-n).reduce((s,x)=>s+x,0)/n:null;
 function std(a,n){if(a.length<n)return null;const v=a.slice(-n),m=sma(v,n);return Math.sqrt(v.reduce((s,x)=>s+(x-m)**2,0)/n);}
@@ -129,26 +130,26 @@ const ratio = raw => {const buy=Math.round(Math.max(5,Math.min(95,50+raw)));retu
 function adviceRatios(a){
   if(!a)return null;
   const i=a.ind,q=a.quote,band=Math.max(.01,i.upper-i.lower),position=(q.close-i.lower)/band;
-  const kd=ratio((i.k-i.d)*1.2+(i.k<20?18:0)-(i.k>80?18:0));
+  const kd=ratio((i.k-i.d)*1.2+(i.k<20&&i.k>i.d?8:0)-(i.k>80?18:0));
   const macd=ratio(a.macd?.score||0);
-  const boll=ratio((.5-position)*70);
+  const boll=ratio(q.close<i.ma20?Math.min(0,(.5-position)*70):(.5-position)*45);
   const above=[i.ma5,i.ma10,i.ma20].filter(x=>q.close>x).length;
   const ma=ratio((above-1.5)*18+(i.ma5>i.ma10&&i.ma10>i.ma20?8:i.ma5<i.ma10&&i.ma10<i.ma20?-8:0));
   const downside=Math.max(.01,q.close-a.rawSupport),upside=Math.max(.01,a.rawResistance-q.close);
-  const levels=ratio((upside/(upside+downside)-.5)*70);
+  const levels=ratio(q.close<i.ma20?Math.min(0,(upside/(upside+downside)-.5)*70):(upside/(upside+downside)-.5)*45);
   const inBuy=q.close>=a.buyLow*.98&&q.close<=a.buyHigh*1.02,inSell=q.close>=a.sellLow;
-  const trade=ratio(inBuy?25:inSell?-30:q.close<a.stop?-45:0);
+  const trade=ratio(q.close<a.stop?-45:inSell?-30:inBuy&&q.close>=i.ma20?15:0);
   const globalBuy=Number(market.global_context?.buy_percent)||50;
   const technical=Math.round((kd.buy+macd.buy+boll.buy+ma.buy+levels.buy+trade.buy)/6);
-  const combined=Math.round(technical*.7+globalBuy*.3);
+  const combined=selectedRisk?.score??50;
   return {kd,macd,boll,ma,levels,trade,technical:ratio(technical-50),global:ratio(globalBuy-50),combined:ratio(combined-50)};
 }
-function ratioBadge(value){const bias=value.buy>=60?'bias-bull':value.buy<=40?'bias-bear':'bias-neutral';const label=value.buy>=60?'偏多':value.buy<=40?'偏空':'中性';return '<div class="ratio '+bias+'"><em>'+label+'</em><b>買 '+value.buy+'%</b><span>賣 '+value.sell+'%</span></div>';}
+function ratioBadge(value){if(!value||!Number.isFinite(value.buy))return '<span class="editornote">資料不足，暫不評分</span>';const bias=value.buy>=60?'bias-bull':value.buy<=40?'bias-bear':'bias-neutral';const label=value.buy>=60?'偏多':value.buy<=40?'偏空':'中性';return '<div class="ratio '+bias+'"><em>'+label+'</em><b>多方 '+value.buy+' 分</b><span>非上漲機率</span></div>';}
 function renderAdvice(a){
   const r=adviceRatios(a),ids=['kdRatio','macdRatio','bollRatio','maRatio','levelRatio','tradeRatio'];
-  if(!r){ids.forEach(id=>$(id).innerHTML=ratioBadge({buy:50,sell:50}));$('overallRatio').innerHTML=ratioBadge({buy:50,sell:50});return;}
+  if(!r){ids.forEach(id=>$(id).textContent='資料不足');$('overallRatio').textContent='暫停評分';return;}
   [['kdRatio',r.kd],['macdRatio',r.macd],['bollRatio',r.boll],['maRatio',r.ma],['levelRatio',r.levels],['tradeRatio',r.trade]].forEach(([id,v])=>$(id).innerHTML=ratioBadge(v));
-  $('overallRatio').innerHTML=ratioBadge(r.combined);
+  $('overallRatio').innerHTML=selectedRisk?.eligible?ratioBadge(r.combined):'<span class="pill">未通過買進檢核</span>';
   $('levelValue').textContent='支撐 '+fmt(a.rawSupport)+' · 壓力 '+fmt(a.rawResistance);
   $('tradeValue').textContent='買 '+fmt(a.buyLow)+'～'+fmt(a.buyHigh)+' · 停損 '+fmt(a.stop)+' · 賣 '+fmt(a.sellLow)+'～'+fmt(a.sellHigh);
 }
@@ -181,7 +182,7 @@ function renderAdvisor(a,flowRows){
 }
 
 function fundamentalAnalysis(code,price,pe,industry){
-  const report=market.financials?.[code]||{},epsReported=Number(report.eps),epsTtm=price>0&&pe>0?price/pe:null;
+  const report=market.financials?.[code]||{},epsReported=JCRisk.num(report.eps),epsTtm=price>0&&pe>0?price/pe:null;
   const peers=Object.entries(market.company_profiles||{}).filter(([peer,p])=>peer!==code&&p.industry===industry.industry).map(([peer])=>Number(latestMarket()[peer]?.pe)).filter(x=>x>0&&x<200);
   const peerPe=median(peers),anchor=Number.isFinite(peerPe)?peerPe:null;
   const fairLow=epsTtm>0&&anchor>0?epsTtm*anchor*.8:null,fairHigh=epsTtm>0&&anchor>0?epsTtm*anchor*1.2:null;
@@ -198,7 +199,7 @@ function renderFundamentals(code,price,pe,industry){
   const view=fundamentalAnalysis(code,price,pe,industry),period=view.report.period||'最新財報';
   $('fundamentalRatio').innerHTML=ratioBadge(view);
   const stats=[
-    ['近四季 EPS',Number.isFinite(view.epsTtm)?fmt(view.epsTtm)+' 元':'無法計算','由收盤價／本益比反推'],
+    ['反推 EPS（非財報實值）',Number.isFinite(view.epsTtm)?fmt(view.epsTtm)+' 元':'無法計算','由收盤價／本益比推估，不代表已核對四季財報'],
     ['最新累計 EPS',Number.isFinite(view.epsReported)?fmt(view.epsReported)+' 元':'尚無資料',period],
     ['公司本益比',view.pe>0?fmt(view.pe)+' 倍':'不適用','官方盤後資料'],
     ['同業本益比中位數',view.peerPe>0?fmt(view.peerPe)+' 倍':'樣本不足',view.peerCount+' 家有效樣本'],
@@ -269,6 +270,8 @@ function holdingDecision(code,a,flowRows){
 
 function renderHoldingDecision(code,a,flowRows){
   const view=holdingDecision(code,a,flowRows);
+  if(view&&selectedRisk&&!selectedRisk.eligible&&view.state==='bull'){view.action='新增買進未通過檢核';view.state='neutral';view.summary='既有持倉請同時檢查上方「我的持倉風險」與固定停損。'+selectedRisk.blocks.join('；');}
+  if(view){try{const record=JSON.parse(localStorage.getItem('jc-position-v1-'+code)||'null'),q=window.JCView?.getSelectedQuote?.(),position=JCRisk.position(record,q);if(position?.breached){view.action='已觸及你的固定停損';view.state='bear';view.summary='報價已低於你儲存的停損價；請立即檢查持倉與成交狀況。此警示優先於技術面的續抱訊號。';}}catch(_){}}
   if(!view){$('holdingRatio').innerHTML=ratioBadge({buy:50,sell:50});$('holdingFactors').innerHTML='<div class="advisor-empty">需累積法人、成交量與至少20個交易日技術資料。</div>';$('holdingConclusion').className='holdingconclusion neutral';$('holdingConclusion').innerHTML='<strong>資料不足</strong>';return;}
   $('holdingRatio').innerHTML=ratioBadge(view);
   $('holdingFactors').innerHTML=view.factors.map(([name,text,state])=>'<div class="advisorfactor '+state+'"><span>'+escape(name)+'</span><strong>'+escape(text)+'</strong></div>').join('');
@@ -521,14 +524,13 @@ function renderMacd(rows,view){
 }
 
 function renderPlan(a){
-  if(!a){$('tradePlan').className='signal neutral';$('tradePlan').innerHTML='<strong>技術資料尚未完整</strong><p>全市場行情正在累積；取得至少20個交易日後將自動產生技術分析。</p>';['buyZone','stopPrice','sellZone'].forEach(id=>$(id).textContent='—');$('levelNote').textContent='每天盤後更新一次，無須把股票加入自選頁才會累積。';return;}
-  const state=a.score>=2?['偏多觀察','bull']:a.score<=-2?['偏弱保守','bear']:['區間等待','neutral'];
-  $('tradePlan').className='signal '+state[1];
-  $('tradePlan').innerHTML='<div><small>規則式綜合判斷</small><strong>'+state[0]+'</strong></div><ul>'+a.reasons.map(x=>'<li>'+escape(x)+'</li>').join('')+'</ul>';
-  $('buyZone').textContent=fmt(a.buyLow)+'～'+fmt(a.buyHigh)+' 元';
-  $('stopPrice').textContent=fmt(a.stop)+' 元';
-  $('sellZone').textContent=fmt(a.sellLow)+'～'+fmt(a.sellHigh)+' 元';
-  $('levelNote').textContent='以前20日高低點、20日均線與布林通道交集估算；最新收盤 '+fmt(a.quote.close)+' 元。';
+  const v=selectedRisk;
+  $('tradePlan').className='signal '+(v?.eligible?'bull':'neutral');
+  $('tradePlan').innerHTML='<strong>'+(v?.eligible?'通過新買進條件，待盤中確認':'暫不列入新買進')+'</strong><ul>'+((v?.eligible?v.notes:v?.blocks)||['資料不足']).map(x=>'<li>'+escape(x)+'</li>').join('')+'</ul>';
+  $('buyZone').textContent=v?.eligible&&a?fmt(a.buyLow)+'～'+fmt(a.buyHigh)+' 元':'暫不提供';
+  $('stopPrice').textContent=v?.stop?fmt(v.stop)+' 元（結構參考）':'—';
+  $('sellZone').textContent=v?.target?fmt(v.target)+' 元（前高參考）':'—';
+  $('levelNote').textContent='結構參考不會自動變更已儲存的持倉停損；新買進需同時滿足資料完整、EPS、趨勢、停損距離與報酬／風險。';
 }
 
 function rank(){
@@ -552,6 +554,8 @@ function renderDataFreshness(now=new Date()){
 }
 function render(){
   if(!market)return; const stock=current()[selected],latestStock=latestMarket()[selected]||stock;
+  selectedRisk=JCRisk.assess(market,selected,{cutoff:institutionDate||market.latest_session});
+  window.JCView?.onRender(selectedRisk);
   renderDataFreshness();
   $('content').classList.toggle('data-incomplete',!stock);
   $('incompleteStock')?.remove();
@@ -590,11 +594,11 @@ function render(){
   }
   let streak=0;for(const row of [...availableFlows].reverse()){if(!row.foreign.net||Math.sign(row.foreign.net)!==Math.sign(f.net))break;streak++;}
   $('foreignStreak').textContent=periodRows.length+'個交易日 · '+(streak?'連續'+streak+'日'+(f.net>0?'買超':'賣超'):'無連續訊號');
-  const priceRows=prices(selected),a=analyze(priceRows,availableFlows),fresh=latestClose(selected),price=fresh?.close??last(priceRows)?.close??latestStock.quote?.close,pe=latestStock.pe;
+  const priceRows=prices(selected).filter(r=>r.date<=(institutionDate||market.latest_session)),a=JCRisk.coverage(market,selected,institutionDate||market.latest_session).verified?analyze(priceRows,availableFlows):null,fresh=latestClose(selected),price=fresh?.close??last(priceRows)?.close??latestStock.quote?.close,pe=latestStock.pe;
   if(a&&largeHolder3d){
-    if(largeHolder3d.ratio>=1){a.score++;a.reasons.push('近3日大戶籌碼比例偏多');}
-    else if(largeHolder3d.ratio<=-1){a.score--;a.reasons.push('近3日大戶籌碼比例偏空');}
-    else a.reasons.push('近3日大戶籌碼比例接近中性');
+    if(largeHolder3d.ratio>=1){a.reasons.push('近3日法人淨買超占成交量偏多，非大戶持股比例');}
+    else if(largeHolder3d.ratio<=-1){a.reasons.push('近3日法人淨買超占成交量偏空，非大戶持股比例');}
+    else a.reasons.push('近3日法人淨買超占成交量接近中性');
   }
   const previousClose=fresh?.previous_close??(priceRows.length>1?priceRows[priceRows.length-2]?.close:null);
   const closeClass=Number.isFinite(price)&&Number.isFinite(previousClose)?(price>previousClose?'pos':price<previousClose?'neg':'flat'):'';
@@ -672,6 +676,8 @@ $('resetWatch').addEventListener('click',()=>{if(!confirm('確定恢復 GitHub �
 $('watchEditor').addEventListener('click',e=>{if(e.target===$('watchEditor'))closeWatchEditor();});
 document.querySelectorAll('[data-rank]').forEach(b=>b.addEventListener('click',()=>{rankSide=b.dataset.rank;document.querySelectorAll('[data-rank]').forEach(x=>x.classList.toggle('active',x===b));rank();}));
 $('ranking').addEventListener('click',e=>{const row=e.target.closest('[data-code]');if(row){selected=row.dataset.code;render();scrollTo({top:0,behavior:'smooth'});}});
+window.JCApp={getMarket:()=>market,getSelected:()=>selected,select:code=>{if(securityUniverse()[code]){selected=code;render();}}};
 load();
 setInterval(()=>{if(!$('watchEditor').open)load();},5*60*1000);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!$('watchEditor').open)load();});
+
