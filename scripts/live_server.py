@@ -79,7 +79,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if path not in ('/', '/index.html', '/app.js', '/risk-engine.js', '/intraday-ui.js', '/style.css', '/data/market.json', '/data/intraday.json', '/data/watchlist.json'):
+        if path not in ('/', '/index.html', '/app.js', '/risk-engine.js', '/market-signals.js', '/intraday-ui.js', '/style.css', '/data/market.json', '/data/intraday.json', '/data/watchlist.json'):
             self.send_error(404)
             return
         super().do_GET()
@@ -98,3 +98,4 @@ if __name__ == '__main__':
     print('Open http://127.0.0.1:8765 — keep this window running.', flush=True)
     webbrowser.open('http://127.0.0.1:8765')
     http.server.ThreadingHTTPServer(('127.0.0.1', 8765), Handler).serve_forever()
+

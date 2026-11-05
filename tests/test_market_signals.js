@@ -1,0 +1,30 @@
+const assert=require('node:assert/strict'),S=require('../market-signals.js');
+const dates=['2026-10-28','2026-10-29','2026-10-30','2026-11-02','2026-11-03'];
+function fixture(){const m={latest_session:dates.at(-1),calendar_verified_at:'2026-11-04',trading_sessions:dates,days:{}};for(let i=0;i<5;i++){m.days[dates[i]]={'2330':{name:'台積電',market:'上市',foreign:{net:i===4?5000:1000},quote:{close:100}},'2603':{name:'長榮',market:'上市',foreign:{net:2000},quote:{close:100}},'6147':{name:'頎邦',market:'上櫃',foreign:{net:-1000}},'0050':{name:'ETF',market:'上市',foreign:{net:9000000}}};}return m;}
+let count=0;function test(n,f){f();count++;console.log('OK',n)}
+test('five-day sums rank by net shares, not latest-day shares',()=>{const r=S.foreignRanking(fixture());assert.equal(r.rows[0].code,'2603');assert.equal(r.rows[0].total,10000);});
+test('single-day ordering changes without changing totals',()=>{const r=S.foreignRanking(fixture(),{period:1});assert.equal(r.rows[0].code,'2330');assert.equal(r.rows[0].total,9000);});
+test('ordinary-stock list excludes ETFs',()=>assert(!S.foreignRanking(fixture()).rows.some(r=>r.code==='0050')));
+test('explicit zero is retained as zero in complete five-day sum',()=>{const m=fixture();m.days[dates[0]]['2603'].foreign.net=0;assert.equal(S.foreignRanking(m).rows.find(r=>r.code==='2603').total,8000);});
+test('missing foreign record never becomes zero',()=>{const m=fixture();delete m.days[dates[0]]['2603'];assert(!S.foreignRanking(m).rows.some(r=>r.code==='2603'));assert.equal(S.foreignRanking(m,{period:1}).rows.find(r=>r.code==='2603').total,null);});
+test('unverified calendar blocks rankings',()=>{const m=fixture();m.calendar_verified_at=null;assert.equal(S.foreignRanking(m).rows.length,0);});
+test('missing whole session blocks rankings',()=>{const m=fixture();delete m.days[dates[1]];assert.equal(S.foreignRanking(m).rows.length,0);});
+test('market and sell-side filters use signed net shares',()=>assert.equal(S.foreignRanking(fixture(),{market:'上櫃',side:'sell'}).rows[0].code,'6147'));
+test('consecutive buying stops at missing information',()=>{const m=fixture();delete m.days[dates[2]]['2603'];assert.equal(S.foreignRanking(m,{period:1}).rows.find(r=>r.code==='2603').streak,2);});
+const now=new Date('2026-11-04T09:03:30+08:00');
+function snapshot(){return {phase:'trading',generated_at:now.toISOString(),quotes:{'2330':{name:'台積電',price:109,previous_close:100,open:104,volume:1000000,timestamp:'2026-11-04T09:03:00+08:00',interval_seconds:60,interval_volume:600000,interval_price_change:1}},order_books:{'2330':{upper_limit:110,timestamp:'2026-11-04T09:03:00+08:00',buy_share:.9,bid_shares:900000}}};}
+test('near-limit signal uses exchange upper limit',()=>{const r=S.nearLimit(snapshot(),now)[0];assert.equal(r.upper,110);assert(r.gap<1);assert.equal(r.accelerating,true);});
+test('stale snapshot produces no current signal',()=>{const s=snapshot();s.generated_at='2026-11-04T09:00:00+08:00';assert.equal(S.nearLimit(s,now).length,0);});
+test('stale trade with fresh batch still produces no signal',()=>{const s=snapshot();s.quotes['2330'].timestamp='2026-11-04T09:00:00+08:00';assert.equal(S.nearLimit(s,now).length,0);});
+test('missing exchange limit does not invent ten-percent target',()=>{const s=snapshot();s.order_books['2330'].upper_limit=null;assert.equal(S.nearLimit(s,now).length,0);});
+test('no adjacent sample does not claim volume acceleration',()=>{const s=snapshot();delete s.quotes['2330'].interval_seconds;assert.equal(S.nearLimit(s,now)[0].accelerating,false);});
+test('closed session has no current near-limit signal',()=>{const s=snapshot();s.phase='closed';assert.equal(S.nearLimit(s,now).length,0);});
+test('volume board can show volume when executed price is missing',()=>{const s={date:'2026-11-04',phase:'trading',volume_quotes:{2330:{name:'台積電',date:'2026-11-04',timestamp:'2026-11-04T09:03:00+08:00',volume:1000000,price:null}}};const r=S.volumeBoard({},s,now);assert.equal(r.mode,'live');assert.equal(r.rows[0].price,null);});
+test('after-close opening observation remains available as history',()=>{const s={date:'2026-11-04',phase:'closed',opening_observations:{2330:{name:'台積電',date:'2026-11-04',opening_complete:true,opening_volume:1000000,price:109,opening_observed_at:'2026-11-04T09:05:00+08:00'}}};const r=S.volumeBoard({},s,new Date('2026-11-04T15:10:00+08:00'));assert.equal(r.mode,'opening_history');assert.equal(r.rows[0].volume,1000000);});
+test('old snapshot cannot be presented as today live volume',()=>{const s={date:'2026-11-03',phase:'trading',volume_quotes:{2330:{date:'2026-11-03',timestamp:'2026-11-03T09:03:00+08:00',volume:1000000,price:100}}};assert.notEqual(S.volumeBoard({},s,now).mode,'live');});
+test('stale current-day volume is history rather than current buy signal',()=>{const s={date:'2026-11-04',phase:'trading',volume_quotes:{2330:{date:'2026-11-04',timestamp:'2026-11-04T09:00:00+08:00',volume:1000000,price:100}}};assert.equal(S.volumeBoard({},s,now).mode,'intraday_history');});
+test('missing intraday data can show dated daily-volume fallback',()=>{const m={price_history:{2330:[{date:'2026-11-03',volume:1000000,close:100}]}};const r=S.volumeBoard(m,null,now);assert.equal(r.mode,'daily_history');assert.equal(r.date,'2026-11-03');});
+test('morning fallback cannot use future closing bar from that day',()=>{const m={price_history:{2330:[{date:'2026-11-03',volume:1000000,close:100},{date:'2026-11-04',volume:9000000,close:110}]}};assert.equal(S.volumeBoard(m,null,now).date,'2026-11-03');});
+test('daily fallback sorts actual volume without inventing three buys',()=>{const m={price_history:{2330:[{date:'2026-11-03',volume:1000000,close:100}],2603:[{date:'2026-11-03',volume:2000000,close:99}]}};const r=S.volumeBoard(m,null,now);assert.equal(r.rows[0].code,'2603');assert.equal(r.rows.length,2);assert(r.warning.includes('不是目前買進'));});
+test('all missing volume sources return explicit no-data state',()=>assert.equal(S.volumeBoard({},null,now).mode,'none'));
+console.log(count+' market-signal tests passed');

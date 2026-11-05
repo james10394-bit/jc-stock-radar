@@ -16,6 +16,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from trading_calendar import fetch_calendar
+from news_risk import TOPICS as RISK_NEWS_TOPICS, merge_items, risk_block as classified_risk_block, election_calendar
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'data' / 'market.json'
@@ -674,18 +675,6 @@ def us_holidays(year):
     return holidays
 
 
-def risk_block(news, category, words):
-    selected = [item for item in news if item['category'] == category]
-    points = 0
-    for item in selected:
-        text = item['title'].lower()
-        points += sum(1 for word in words if word in text)
-        points -= sum(1 for word in EASING_WORDS if word in text)
-    points = max(0, points)
-    level = '高' if points >= 6 else '中' if points >= 3 else '低'
-    return {'level': level, 'points': points, 'impact': -min(15, points * 2), 'headlines': len(selected)}
-
-
 GLOBAL_MARKET_INDICATORS = [
     ('^GSPC', 'S&P 500'),
     ('^IXIC', '那斯達克綜合指數'),
@@ -718,35 +707,46 @@ def fetch_market_indicators(previous=None):
 def fetch_global_context(now, previous=None):
     indicators = fetch_market_indicators(previous)
 
-    topics = [
-        ('全球市場', '台股 美股 半導體 全球股市 when:1d'),
-        ('川普政策', 'Trump tariff trade Taiwan semiconductor when:1d'),
-        ('全球戰爭', 'global war missile attack ceasefire oil market when:1d'),
-        ('台海風險', '台海 台灣海峽 解放軍 軍演 封鎖 Taiwan Strait when:2d'),
-    ]
+    topics = RISK_NEWS_TOPICS
     news = []
+    fetch_status = {}
     for category, query in topics:
         try:
             url = GOOGLE_NEWS + '?' + urllib.parse.urlencode({'q': query, 'hl': 'zh-TW', 'gl': 'TW', 'ceid': 'TW:zh-Hant'})
             request = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 TWSE-Flow/2.1'})
             with urllib.request.urlopen(request, timeout=25) as response:
                 root = ET.fromstring(response.read())
-            for item in root.findall('./channel/item')[:6]:
+            entries = root.findall('./channel/item')[:8]
+            fetch_status[category] = {'status':'ok' if entries else 'empty','returned':len(entries),'checked_at':now.isoformat(timespec='seconds')}
+            for item in entries:
                 title = (item.findtext('title') or '').strip()
                 if title:
                     news.append({'category': category, 'title': title, 'url': item.findtext('link') or '',
+                                 'summary': item.findtext('description') or '',
+                                 'source': item.findtext('source') or '',
                                  'published': item.findtext('pubDate') or '', 'score': news_score(title)})
         except Exception as exc:
             print(f'{category} news: {exc}')
+            fetch_status[category] = {'status':'error','error':str(exc)[:240],'checked_at':now.isoformat(timespec='seconds')}
+    # Reclassify all queries, including market headlines that mention attacks.
+    # Failed topics may retain recent cached evidence, explicitly labelled stale.
+    for item in (previous or {}).get('news',[]):
+        if any(fetch_status.get(c,{}).get('status')!='ok' for c in item.get('query_categories',[item.get('category')])):
+            news.append({**item,'cached':True})
+    news = merge_items(news, now)
 
     raw = 0.0
     for item in indicators:
+        if item.get('stale'):
+            continue
         change = item['change_pct'] * (-1 if item['symbol'] == '^VIX' else 1)
         raw += max(-4, min(4, change)) * 3
-    raw += sum(item['score'] for item in news) * 1.4
-    war = risk_block(news, '全球戰爭', WAR_WORDS)
-    strait = risk_block(news, '台海風險', STRAIT_WORDS + WAR_WORDS)
-    raw += war['impact'] + strait['impact']
+    raw += sum(item.get('score',0) for item in news if not item.get('cached') and not item.get('tags')) * 1.4
+    war = classified_risk_block(news, '全球戰爭', fetch_status, now)
+    strait = classified_risk_block(news, '台海風險', fetch_status, now)
+    election = classified_risk_block(news, '美國選舉', fetch_status, now)
+    # Do not double-charge one headline classified into multiple topics.
+    raw += min(war['impact'] or 0, strait['impact'] or 0)
     weekday = now.weekday()
     holiday = {'label': '一般交易週', 'score': 0}
     holiday_factors = []
@@ -779,9 +779,13 @@ def fetch_global_context(now, previous=None):
         raw -= 3
     buy = round(max(10, min(90, 50 + raw)))
     return {'updated_at': now.isoformat(timespec='seconds'), 'buy_percent': buy, 'sell_percent': 100 - buy,
-            'holiday_factor': holiday, 'holiday_factors': holiday_factors, 'indicators': indicators, 'news': news[:16],
-            'risk_analysis': {'global_war': war, 'taiwan_strait': strait},
-            'method': 'S&P 500、那斯達克、道瓊、費城半導體、VIX、美台假日、全球戰爭與台海新聞關鍵字之規則式評分'}
+            'holiday_factor': holiday, 'holiday_factors': holiday_factors, 'indicators': indicators, 'news': news,
+            'news_fetch_status': fetch_status,
+            'risk_method_version': 2,
+            'risk_data_incomplete': any(s.get('status') != 'ok' for s in fetch_status.values()) or war['status'] in ('unavailable','stale') or strait['status'] in ('unavailable','stale'),
+            'risk_analysis': {'global_war': war, 'taiwan_strait': strait, 'us_election': election},
+            'us_election': election_calendar(now),
+            'method': '指數與假日規則分數；新聞只分析標題與RSS摘要，非全文／非事件查核。抓取失敗不等於低風險。'}
 
 
 def fetch_stock_news(codes, profiles, stocks, now, previous=None):
@@ -1217,7 +1221,7 @@ def main():
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.6.0',
+        'version': '2.6.3',
         'trading_sessions': calendar_sessions,
         'calendar_verified_at': calendar_verified_at,
         'calendar_month': target.strftime('%Y-%m'),
@@ -1251,4 +1255,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 

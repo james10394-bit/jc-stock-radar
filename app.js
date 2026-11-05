@@ -1,6 +1,6 @@
 /* TWSE + TPEx Flow v2.6.0 — mobile pointer drag sorting for watchlists. */
 const $ = id => document.getElementById(id);
-const APP_VERSION = '2.6.0';
+const APP_VERSION = '2.6.3';
 let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0, institutionDate = null;
 let watchPagesData = [], editingPages = [], watchDrag = null;
 let selectedRisk = null;
@@ -376,14 +376,31 @@ function renderGlobal(){
   const bySymbol=Object.fromEntries(rawItems.map(x=>[x.symbol,x]));
   const items=indicatorOrder.map(([symbol,name])=>({...bySymbol[symbol],symbol,name,missing:!bySymbol[symbol]}));
   $('globalRatio').innerHTML=ratioBadge({buy:Number(g.buy_percent)||50,sell:Number(g.sell_percent)||50});
-  $('globalStamp').textContent=g.updated_at?'約15分鐘同步 · 系統更新 '+g.updated_at.replace('T',' ').slice(0,16):'全球資料暫時無法更新';
+  $('globalStamp').textContent=g.updated_at?'盤後排程資料，非即時事件監控 · 系統更新 '+g.updated_at.replace('T',' ').slice(0,16):'全球資料暫時無法更新';
   const stateName={REGULAR:'盤中',PRE:'盤前',POST:'盤後',CLOSED:'休市'};
   $('globalIndicators').innerHTML=items.map(x=>'<div><span>'+escape(x.name)+'<small>'+escape(x.missing?'等待下次同步':x.stale?'前次資料':stateName[x.market_state]||'狀態未知')+(x.asof?' · '+escape(x.asof.replace('T',' ').slice(5)):'')+'</small></span><strong class="'+color(x.change_pct)+'">'+(Number.isFinite(x.change_pct)&&x.change_pct>=0?'+':'')+fmt(x.change_pct)+(Number.isFinite(x.change_pct)?'%':'')+'</strong></div>').join('');
   const holidays=g.holiday_factors||[];
   $('holidayFactor').innerHTML=holidays.length?holidays.map(x=>'<div><b>'+escape(x.country)+'</b><span>'+escape(x.name)+' · '+escape(x.date)+'</span><em>'+escape(x.market_closed?'市場休市':'美股照常交易')+'</em></div>').join(''):escape(g.holiday_factor?.label||'未來七日無美台假日');
-  const risks=g.risk_analysis||{},riskCard=(id,data)=>{const d=data||{level:'無資料',points:0,impact:0,headlines:0};$(id).className='riskcard risk-'+(d.level==='高'?'high':d.level==='中'?'mid':'low');$(id).innerHTML='<span>風險等級</span><strong>'+escape(d.level)+'</strong><small>事件分數 '+fmt(d.points,0)+' · 買方影響 '+fmt(d.impact,0)+' 分 · '+fmt(d.headlines,0)+' 則新聞</small>';};
+  const safeLink=url=>/^https:\/\//i.test(url||'')?escape(url):'#';
+  const contextAge=Date.now()-Date.parse(g.updated_at||'');
+  const risks=g.risk_analysis||{},riskCard=(id,data)=>{
+    const d=data||{},legacy=g.risk_method_version!==2||!d.status,expired=!(contextAge>=0&&contextAge<=36*3600000);
+    const level=expired?'資料過期':legacy?'資料不足':d.level||'資料不足';
+    const grade=level==='高'?'high':level==='中'?'mid':'unknown';
+    $(id).className='riskcard risk-'+grade;
+    const impact=!expired&&!legacy&&d.usable&&Number.isFinite(d.impact)?fmt(d.impact,0)+'分':'不作方向加分';
+    const explanation=legacy?'舊資料未保留抓取狀態與證據，不能判為低風險':expired?'資料超過36小時，請更新後再判讀':d.reason||'尚無可用資料';
+    const evidence=d.evidence||[];
+    $(id).innerHTML='<span>新聞訊號警戒 · 非事實查核</span><strong>'+escape(level)+'</strong><small>'+escape(explanation)+'</small><small>規則分數 '+(!expired&&!legacy&&Number.isFinite(d.points)?fmt(d.points,0):'—')+'｜分析影響 '+impact+'｜相關報導 '+fmt(d.headlines||0,0)+' 則</small>'+(evidence.length?'<ul class="risk-evidence">'+evidence.slice(0,3).map(x=>'<li><a href="'+safeLink(x.url)+'" target="_blank" rel="noopener">'+escape(x.title)+'</a><small>'+escape(x.source||'來源見原文')+'｜'+escape(x.published_at||x.published||'發布時間未提供')+'｜'+escape(x.evidence_status||'媒體報導，未獨立核實')+'</small></li>').join('')+'</ul>':'');
+  };
   riskCard('warRisk',risks.global_war);riskCard('straitRisk',risks.taiwan_strait);
-  $('newsList').innerHTML=news.length?news.map(x=>'<li><span>'+escape(x.category)+'</span><a href="'+escape(x.url)+'" target="_blank" rel="noopener">'+escape(x.title)+'</a><b class="'+(x.score>0?'pos':x.score<0?'neg':'')+'">'+(x.score>0?'偏多':x.score<0?'風險':'中性')+'</b></li>').join(''):'<li>今日重大新聞暫時無法取得。</li>';
+  riskCard('electionRisk',risks.us_election);
+  const election=g.us_election||{},focus=election.focus;
+  $('electionCalendar').innerHTML=focus?'<strong>'+escape(focus.name)+'｜'+escape(focus.date)+'（美國當地）</strong><p>'+escape(focus.phase)+'｜'+escape(focus.results_status)+'</p><p>美東時間 '+escape(election.us_eastern_time||'未知')+'</p><p>'+escape(focus.note)+'<br>政策觀察：'+escape((election.policy_watch||[]).join('、'))+'</p><a href="'+safeLink(focus.source)+'" target="_blank" rel="noopener">官方選舉日程 ↗</a>':'尚未取得已核對的選舉日程；請執行資料更新。';
+  const feeds=g.news_fetch_status||{};
+  $('newsCoverage').textContent=Object.keys(feeds).length?'本輪新聞抓取：'+Object.entries(feeds).map(([name,v])=>name+' '+(v.status==='ok'?'取得'+v.returned+'則':v.status==='empty'?'結果為空':'抓取失敗')).join('｜')+'。只分析標題與RSS摘要，未自動閱讀全文或核實事件。':'舊快照沒有專題抓取狀態，不能據此判為低風險。';
+  $('newsMethod').textContent=g.method||'舊版僅標題關鍵字規則；請更新取得證據與資料狀態。';
+  $('newsList').innerHTML=news.length?news.map(x=>'<li><span>'+escape(x.category)+'</span><div><a href="'+safeLink(x.url)+'" target="_blank" rel="noopener">'+escape(x.title)+'</a><small>'+escape(x.source||'來源見原文')+'｜'+escape(x.published_at||x.published||'發布時間未提供')+(x.cached?'｜前次快取，非本輪新資料':'')+'</small></div><b class="'+(x.tags?.length?'':x.score>0?'pos':x.score<0?'neg':'')+'">'+(x.tags?.length?'報導待查核':x.score>0?'文字偏多':x.score<0?'風險用語':'未分類')+'</b></li>').join(''):'<li>重大新聞暫時無法取得；不是沒有風險。</li>';
 }
 
 function normalizeWatchPages(value){
@@ -534,8 +551,10 @@ function renderPlan(a){
 }
 
 function rank(){
-  const rows=Object.entries(current()).filter(([,s])=>Number.isFinite(s.foreign?.net)).sort((a,b)=>rankSide==='buy'?b[1].foreign.net-a[1].foreign.net:a[1].foreign.net-b[1].foreign.net).slice(0,10);
-  $('ranking').innerHTML=rows.map(([code,s],i)=>'<tr data-code="'+escape(code)+'"><td>'+(i+1)+'</td><td>'+escape(code)+' '+escape(s.name)+'</td><td class="'+color(s.foreign.net)+'">'+lots(s.foreign.net)+'</td><td>'+(Number.isFinite(s.quote?.close)?fmt(s.quote.close)+' 元':'—')+'</td></tr>').join('');
+  if(!market)return;
+  const period=Number($('rankPeriod').value),v=JCSignals.foreignRanking(market,{period,side:rankSide,market:$('rankMarket').value});
+  $('rankSummary').textContent=v.error||'截至 '+v.cutoff+'｜近5個交易日 '+v.sessions[0]+'～'+v.sessions.at(-1)+'｜按'+(period===5?'5日累計':'當日')+'淨'+(rankSide==='buy'?'買超':'賣超')+'排序｜有效 '+v.total+' 檔｜5日缺資料 '+v.incomplete+' 檔（不補零）';
+  $('ranking').innerHTML=v.rows.length?v.rows.map((s,i)=>'<tr data-code="'+escape(s.code)+'" tabindex="0" role="button" aria-label="分析 '+escape(s.code+' '+s.name)+'"><td>'+(i+1)+'</td><td><strong>'+escape(s.code)+'</strong><br>'+escape(s.name)+'<small> '+escape(s.market)+'</small></td><td class="'+color(s.today)+'">'+lots(s.today)+'</td><td class="'+color(s.total)+'">'+(s.total===null?'資料不足':lots(s.total))+'</td><td>'+s.streak+'日'+(s.streak>=3?' ⚠️':'')+'</td><td>'+(s.close!==null?fmt(s.close)+' 元':'—')+'</td></tr>').join(''):'<tr><td colspan="6">'+escape(v.error||'目前沒有符合此排序方向的完整資料')+'</td></tr>';
 }
 
 function renderDataFreshness(now=new Date()){
@@ -554,6 +573,7 @@ function renderDataFreshness(now=new Date()){
 }
 function render(){
   if(!market)return; const stock=current()[selected],latestStock=latestMarket()[selected]||stock;
+  rank();
   selectedRisk=JCRisk.assess(market,selected,{cutoff:institutionDate||market.latest_session});
   window.JCView?.onRender(selectedRisk);
   renderDataFreshness();
@@ -676,8 +696,12 @@ $('resetWatch').addEventListener('click',()=>{if(!confirm('確定恢復 GitHub �
 $('watchEditor').addEventListener('click',e=>{if(e.target===$('watchEditor'))closeWatchEditor();});
 document.querySelectorAll('[data-rank]').forEach(b=>b.addEventListener('click',()=>{rankSide=b.dataset.rank;document.querySelectorAll('[data-rank]').forEach(x=>x.classList.toggle('active',x===b));rank();}));
 $('ranking').addEventListener('click',e=>{const row=e.target.closest('[data-code]');if(row){selected=row.dataset.code;render();scrollTo({top:0,behavior:'smooth'});}});
+$('rankPeriod').addEventListener('change',rank);
+$('rankMarket').addEventListener('change',rank);
+$('ranking').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){const row=e.target.closest('[data-code]');if(row){e.preventDefault();selected=row.dataset.code;render();$('title').scrollIntoView({behavior:'smooth',block:'center'});}}});
 window.JCApp={getMarket:()=>market,getSelected:()=>selected,select:code=>{if(securityUniverse()[code]){selected=code;render();}}};
 load();
 setInterval(()=>{if(!$('watchEditor').open)load();},5*60*1000);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!$('watchEditor').open)load();});
+
 

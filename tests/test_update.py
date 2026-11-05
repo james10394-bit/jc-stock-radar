@@ -125,8 +125,9 @@ class TestTWSE(unittest.TestCase):
         holidays = update.us_holidays(2026)
         self.assertIn(update.dt.date(2026, 7, 3), holidays)
         self.assertTrue(holidays[update.dt.date(2026, 7, 3)][1])
-        news = [{'category': '台海風險', 'title': '台海軍演與飛彈封鎖風險升高'}]
-        risk = update.risk_block(news, '台海風險', update.STRAIT_WORDS + update.WAR_WORDS)
+        now = update.dt.datetime(2026,11,4,10,tzinfo=update.TAIPEI)
+        news = [{'category': '台海風險', 'title': '台海軍演與飛彈封鎖風險升高', 'published':'Wed, 04 Nov 2026 01:00:00 GMT'}]
+        risk = update.classified_risk_block(news, '台海風險', {'台海風險':{'status':'ok'}}, now)
         self.assertGreater(risk['points'], 0)
 
     def test_parse_taifex_night_quote(self):
@@ -188,4 +189,5 @@ class TestTWSE(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
 

@@ -30,6 +30,12 @@
     const cutoff=options.cutoff||m.latest_session,live=options.live||null,profile=m.company_profiles?.[code]||m.security_registry?.[code]||{};
     const cov=coverage(m,code,cutoff),rows=cov.rows,t=technical(rows),end=last(rows),f=financial(m,code),blocks=[],notes=[];
     const p=num(live?.price??end?.close),previous=num(live?.previous_close??rows.at(-2)?.close);
+    const globalRisk=m.global_context||{},contextAge=Date.parse(options.now||new Date())-Date.parse(globalRisk.updated_at||'');
+    const contextFresh=contextAge>=0&&contextAge<=36*3600000;
+    const eventSignals=Object.values(globalRisk.risk_analysis||{});
+    if(contextFresh&&globalRisk.risk_method_version===2&&eventSignals.some(r=>r.level==='高'&&r.usable&&r.evidence?.length))blocks.push('重大事件標題／摘要出現高警戒訊號，暫停新買進，待人工查核');
+    if(!contextFresh||globalRisk.risk_method_version!==2||globalRisk.risk_data_incomplete)notes.push('事件資料過期、未驗證或不完整：不給全球因素多方加分，不代表低風險');
+    if(contextFresh&&globalRisk.us_election?.focus?.risk_watch)notes.push(globalRisk.us_election.focus.name+'：'+globalRisk.us_election.focus.phase+'；留意政策及波動，未核實結果前不作方向加分');
     if(!['上市','上櫃'].includes(profile.market)||!/^\d{4}$/.test(code))blocks.push('此買進篩選僅支援上市／上櫃普通股');
     if(!cov.verified)blocks.push('行情或近5日法人缺漏／交易日曆未驗證，暫停評分');
     if(!end||end.date!==last(cov.sessions))blocks.push('最新完整交易日行情尚未同步');
@@ -59,7 +65,8 @@
       if(cov.verified){
         const trend=(p>=t.ma20?16:-16)+(t.ma5>=t.ma10?8:-8),flow=net>0?8:-8,earnings=f.eps>0?12:-18;
         const global=m.global_context||{},age=Date.parse(options.now||new Date())-Date.parse(global.updated_at||'');
-        const macro=age>=0&&age<=36*3600000&&num(global.buy_percent)!==null?Math.max(-8,Math.min(8,(global.buy_percent-50)*.2)):0;
+        let macro=age>=0&&age<=36*3600000&&num(global.buy_percent)!==null?Math.max(-8,Math.min(8,(global.buy_percent-50)*.2)):0;
+        if(global.risk_method_version!==2||global.risk_data_incomplete)macro=Math.min(0,macro);
         score=Math.max(0,Math.min(100,Math.round(50+trend+flow+earnings+macro)));
       }
     }
@@ -78,22 +85,28 @@
   }
   function scan(m,snapshot,now=new Date()){
     if(!snapshot||snapshot.phase!=='trading')return {candidates:[],reason:'非交易時段，開盤名單不構成目前買進建議',examined:0};
+    const today=now.toLocaleDateString('en-CA',{timeZone:'Asia/Taipei'}),parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now).map(x=>[x.type,x.value]));
+    const minutes=Number(parts.hour)*60+Number(parts.minute),weekday=new Date(today+'T12:00:00+08:00').getUTCDay();
+    if(snapshot.date!==today)return {candidates:[],reason:'快照不是今日資料，尚未開始今日篩選',examined:0};
+    if(weekday===0||weekday===6||minutes<540||minutes>=810)return {candidates:[],reason:'目前非交易時段，僅可回看觀測紀錄',examined:0};
     if(snapshot.coverage?.batches_failed>0)return {candidates:[],reason:'部分行情批次失敗，暫停全市場候選篩選',examined:0};
     const age=now.getTime()-Date.parse(snapshot.generated_at||'');
     if(!(age>=0&&age<=120000))return {candidates:[],reason:'整批快照已超過2分鐘，暫停候選名單',examined:0};
-    const results=[],sectors={};let examined=0;
+    const results=[],sectors={},exclusions={};let examined=0;
+    const reject=reason=>{exclusions[reason]=(exclusions[reason]||0)+1;};
     const sessions=calendar(m,snapshot.date),cutoff=sessions.filter(d=>d<snapshot.date).at(-1);
     if(!cutoff)return {candidates:[],reason:'前一交易日資料未確認',examined:0};
     for(const [code,q]of Object.entries(snapshot.quotes||{})){
-      if(!q.opening_complete||!(q.opening_volume>0))continue;
+      if(!q.opening_complete||!(q.opening_volume>0)){reject('缺少09:05開盤觀測');continue;}
       const ageQuote=now.getTime()-Date.parse(q.timestamp||'');const live={...q,phase:snapshot.phase,fresh:ageQuote>=0&&ageQuote<=120000};
       const v=assess(m,code,{cutoff,live,now});examined++;
       const history=(m.price_history?.[code]||[]).filter(r=>r.date<=cutoff).slice(-20),avg=mean(history.map(r=>num(r.volume)).filter(x=>x!==null));
       const fraction=avg>0?q.opening_volume/avg:null,amount=q.opening_volume*q.open;
       // This is the first-five-minute volume / prior 20-day FULL-DAY volume.
       // It is intentionally NOT mislabeled as a same-time relative volume.
-      if(!v.eligible||fraction===null||fraction<.08||q.opening_volume<500000||amount<20000000)continue;
-      if(q.price<q.open||q.price<q.opening_low||q.price/q.open-1>.03)continue;
+      if(!v.eligible){v.blocks.forEach(reject);continue;}
+      if(fraction===null||fraction<.08||q.opening_volume<500000||amount<20000000){reject('開盤量能或成交金額未達門檻');continue;}
+      if(q.price<q.open||q.price<q.opening_low||q.price/q.open-1>.03){reject('跌回開盤區間或追價過高');continue;}
       const industry=m.company_profiles?.[code]?.industry||'未分類';
       const strength=q.previous_close>0?(q.price/q.previous_close-1)*100:0;
       (sectors[industry]||= []).push(strength);
@@ -101,7 +114,8 @@
     }
     results.sort((a,b)=>b.score-a.score||b.openingAmount-a.openingAmount);
     const chosen=[],used=new Set();for(const r of results){if(used.has(r.industry))continue;used.add(r.industry);r.sectorSample=sectors[r.industry].length;r.sectorMean=mean(sectors[r.industry]);chosen.push(r);if(chosen.length===3)break;}
-    return {candidates:chosen,examined,reason:chosen.length?'符合條件 '+chosen.length+' 檔；每個產業最多1檔':'目前沒有同時通過量能、財報、趨勢及風險報酬檢核的股票'};
+    return {candidates:chosen,examined,exclusions,reason:chosen.length?'符合條件 '+chosen.length+' 檔；每個產業最多1檔':'目前沒有同時通過量能、財報、趨勢及風險報酬檢核的股票'};
   }
   const api={num,technical,coverage,financial,assess,position,scan};root.JCRisk=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
+

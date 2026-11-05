@@ -7,11 +7,11 @@
   <meta name="description" content="整合上市與上櫃三大法人、KD、布林通道、均線與支撐壓力的台股研究工具。">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2312b89a'/%3E%3Cpath d='M12 42l12-13 9 8 19-22v12L34 48l-10-9-12 13z' fill='white'/%3E%3C/svg%3E">
   <title>台股法人技術分析站</title>
-  <link rel="stylesheet" href="style.css?v=2.6.0">
+  <link rel="stylesheet" href="style.css?v=2.6.3">
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE＋TPEx FLOW · v2.6.0 開盤觀察與統一風控版</small></div></div>
+  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE＋TPEx FLOW · v2.6.3 開盤觀察與統一風控版</small></div></div>
   <a href="https://www.twse.com.tw/" target="_blank" rel="noopener">官方資料：臺灣證券交易所 ↗</a>
 </header>
 <main>
@@ -25,11 +25,26 @@
     <button id="refresh">重新讀取</button>
   </div>
   <p id="dataFreshness" class="hint" role="status" style="line-height:1.8;margin:12px 0">正在確認法人資料更新狀態…</p>
+  <section class="opening-desk foreign-rank" aria-label="外資淨買超排行">
+    <div class="opening-title"><div><div class="eyebrow">盤後法人 · 資料與盤中行情分開</div><h2>外資淨買超排行</h2></div><a href="#earlySignals">查看開盤警示 ↓</a></div>
+    <div class="rank-controls"><label>排序依據<select id="rankPeriod"><option value="1">當日淨買超</option><option value="5" selected>5日累計淨買超</option></select></label><label>市場<select id="rankMarket"><option value="all">上市＋上櫃普通股</option><option value="上市">上市</option><option value="上櫃">上櫃</option></select></label><div class="tabs"><button class="active" data-rank="buy">淨買超</button><button data-rank="sell">淨賣超</button></div></div>
+    <p id="rankSummary" role="status">等待盤後法人資料…</p><p>顯示前20名，5日是交易日；淨買超＝買進－賣出。外資連買3日以上加註警戒，不代表必跌。排行是籌碼觀察，不是買進名單。</p>
+    <div class="scroll"><table><thead><tr><th>排名</th><th>股票</th><th>當日淨買超</th><th>5日累計</th><th>連續買超</th><th>法人資料日收盤</th></tr></thead><tbody id="ranking"></tbody></table></div>
+  </section>
+  <section class="opening-desk" id="earlySignals" aria-label="開盤量價與委託警示">
+    <div class="eyebrow">盤中公開訊號 · 非外資身分辨識</div><h2>接近漲停與09:05前買盤觀測</h2>
+    <p>五檔是未成交委託，可能撤單，無法辨識外資。接近漲停只描述現在的位置，不預測一定漲停，也不構成追價建議。盤中成交量與盤後外資排行各自標時。</p>
+    <p id="signalCoverage" role="status">等待當日盤中資料…</p>
+    <h3>目前接近漲停（距漲停價2%內）</h3><div id="nearLimitSignals" class="signal-cards"></div>
+    <h3>當日09:05前曾觀測到買方委託偏多</h3><p>買方五檔合計至少500張且占雙方五檔80%以上；必須當時有實際抓到，啟動較晚不回填。這是委託紀錄，不是外資成交紀錄。</p><div id="earlyBookSignals" class="signal-cards"></div>
+  </section>
   <section class="opening-desk" aria-label="開盤量能觀察">
     <div class="opening-title"><div><div class="eyebrow">09:00 開盤觀察</div><h2>量能與風控候選 · 最多3檔</h2></div><button type="button" id="liveRefresh">更新盤中快照</button></div>
     <p id="liveStatus" role="status">正在確認盤中資料…</p><p id="liveSelected"></p>
     <p>開盤前5分鐘先觀察；約09:05後依實際觀測量篩選。量能比較為「開盤觀測量／前20日平均整日成交量」，不是同時段量比。每個產業最多1檔，符合條件不足3檔時不補滿。</p>
     <p id="scanSummary"></p><div id="openingPicks" class="opening-picks"></div><div id="openingSectors" class="opening-sectors"></div>
+    <p id="scanDiagnostics" class="hint"></p>
+    <section class="volume-board"><h3 id="volumeBoardTitle">原始量能觀察榜</h3><p id="volumeBoardStatus" role="status"></p><p>量能排行與風控候選分開。表格有股票，只代表取得量能；不代表建議買進，盤後紀錄也不代表現在可買。</p><div class="scroll"><table><thead><tr><th>排名</th><th>股票</th><th>成交量</th><th>原觀測價格</th><th>資料時間／日期</th></tr></thead><tbody id="volumeBoard"></tbody></table></div></section>
   </section>
   <div class="workspace">
     <aside class="watchhub" id="watchHub">
@@ -190,17 +205,12 @@
         <p class="hint">S&amp;P 500、那斯達克、道瓊、費城半導體、VIX、新聞標題關鍵字與休市風險採固定權重計算。</p>
       </article>
       <article class="panel">
-        <div class="panelhead"><div><h3>今日全球重點新聞</h3><p>川普政策、全球戰爭、台海、半導體與全球股市</p></div></div>
-        <div class="riskgrid"><div><h4>全球戰爭分析</h4><div id="warRisk" class="riskcard"></div></div><div><h4>台海情勢分析</h4><div id="straitRisk" class="riskcard"></div></div></div>
+        <div class="panelhead"><div><h3>今日全球重點新聞</h3><p>美國選舉、川普政策、戰爭、台海與市場新聞；均附來源及資料狀態</p></div></div>
+        <div class="riskgrid"><div><h4>全球戰爭新聞訊號</h4><div id="warRisk" class="riskcard"></div></div><div><h4>台海新聞訊號</h4><div id="straitRisk" class="riskcard"></div></div><div><h4>美國選舉觀測</h4><div id="electionRisk" class="riskcard"></div></div></div><section id="electionCalendar" class="election-calendar"></section><p id="newsCoverage" class="hint" role="status"></p><p id="newsMethod" class="hint"></p>
         <ul id="newsList" class="newslist"></ul>
       </article>
     </div>
 
-    <div class="sectiontitle blocktitle"><div class="eyebrow">市場排行</div><h2>市場外資排行榜</h2></div>
-    <div class="panel full nomargin">
-      <div class="panelhead"><div><h3>外資買賣超排行</h3><p>最新交易日 · 單位：張</p></div><div class="tabs"><button class="active" data-rank="buy">買超</button><button data-rank="sell">賣超</button></div></div>
-      <div class="scroll"><table><thead><tr><th>名次</th><th>股票</th><th>外資買賣超</th><th>收盤價</th></tr></thead><tbody id="ranking"></tbody></table></div>
-    </div>
       </section>
     </div>
   </div>
@@ -224,9 +234,11 @@
   資料取自臺灣證券交易所、證券櫃檯買賣中心公開盤後資料及公開市場／新聞摘要。所有比例均為固定公式評分，不代表上漲機率或獲利保證，僅供研究參考，不構成投資建議。<br>
   <a href="https://www.twse.com.tw/zh/trading/foreign/t86.html">上市三大法人</a> · <a href="https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html">上櫃三大法人</a> · <a href="https://www.twse.com.tw/zh/trading/historical/bwibbu-day.html">本益比</a> · <a href="https://openapi.twse.com.tw/">財報 EPS</a> · <a href="https://www.taifex.com.tw/cht/4/aHIntroduction">臺股期貨夜盤</a>
 </footer>
-<script src="risk-engine.js?v=2.6.0" defer></script>
-<script src="intraday-ui.js?v=2.6.0" defer></script>
-<script src="app.js?v=2.6.0" defer></script>
+<script src="risk-engine.js?v=2.6.3" defer></script>
+<script src="market-signals.js?v=2.6.3" defer></script>
+<script src="intraday-ui.js?v=2.6.3" defer></script>
+<script src="app.js?v=2.6.3" defer></script>
 </body>
 </html>
+
 
