@@ -16,6 +16,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from trading_calendar import fetch_calendar
+from long_cycle import refresh as refresh_long_term
 from news_risk import TOPICS as RISK_NEWS_TOPICS, merge_items, risk_block as classified_risk_block, election_calendar
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -927,6 +928,12 @@ def main():
     alpha_price_sessions = set(old.get('twse_alpha_sessions', []))
     target = now.date()
     changed = False
+    try:
+        old['long_term'] = refresh_long_term(old.get('long_term'), now)
+        changed = True
+        print('Long-term official history:', old['long_term']['analysis']['coverage'])
+    except Exception as exc:
+        print('Long-term refresh failed; existing history preserved:', exc)
     latest_quotes = old.get('latest_quotes', {})
 
     # Older snapshots predate market labels. Existing records are TWSE unless
@@ -1221,7 +1228,7 @@ def main():
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.6.3',
+        'version': '2.7.0',
         'trading_sessions': calendar_sessions,
         'calendar_verified_at': calendar_verified_at,
         'calendar_month': target.strftime('%Y-%m'),

@@ -7,11 +7,11 @@
   <meta name="description" content="整合上市與上櫃三大法人、KD、布林通道、均線與支撐壓力的台股研究工具。">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2312b89a'/%3E%3Cpath d='M12 42l12-13 9 8 19-22v12L34 48l-10-9-12 13z' fill='white'/%3E%3C/svg%3E">
   <title>台股法人技術分析站</title>
-  <link rel="stylesheet" href="style.css?v=2.6.3">
+  <link rel="stylesheet" href="style.css?v=2.7.0">
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE＋TPEx FLOW · v2.6.3 開盤觀察與統一風控版</small></div></div>
+  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE＋TPEx FLOW · v2.7.0 康波與長期市場研究版</small></div></div>
   <a href="https://www.twse.com.tw/" target="_blank" rel="noopener">官方資料：臺灣證券交易所 ↗</a>
 </header>
 <main>
@@ -19,6 +19,31 @@
     <div><div class="eyebrow">集中市場 · 法人籌碼 × 技術指標</div><h1>一頁看懂籌碼、趨勢與關鍵價位。</h1><p>整合外資、投信、自營商買賣超，並以歷史行情計算 KD、布林通道、均線與規則式進出場區間。</p></div>
     <div class="stamp" id="stamp">讀取資料中…</div>
   </div>
+  <section class="opening-desk long-cycle" id="longCycle" aria-label="1990年至今康波與長期市場研究">
+    <div class="eyebrow">長期歷史數據 × 長波假說檢驗</div><h2>1990年至今：康波週期與長期股市研究</h2>
+    <p id="cycleStatus" role="status">正在載入長期歷史資料…</p>
+    <div id="cycleConclusion" class="cycle-conclusion">先核對資料範圍，再判讀長期走勢。</div>
+    <div id="cycleMetrics" class="cycle-metrics"></div>
+    <div class="opening-title"><h3>台股加權指數歷史走勢</h3><label>圖表<select id="cycleChartMode"><option value="log">對數價格</option><option value="drawdown">月末收盤回撤</option></select></label></div>
+    <div id="cycleChart" class="cycle-chart"></div><p>圖表採已完成月份的月底最後成交日；對數座標等距代表相同漲跌比例。月末回撤可能小於上方以日收盤計算的最大回撤。本月最新收盤另列，未當作完整月線。</p>
+    <h3>未來走勢：條件式情境</h3><div id="cycleScenarios"></div>
+    <details open><summary>康波40／50／60年：計算結果與起點敏感度</summary>
+      <p>預先固定三種週期，以log(指數)＝常數＋時間趨勢＋sin(2πt/T)＋cos(2πt/T)擬合；不搜尋最佳週期。表中「上行／下行」只指扣除線性趨勢後，擬合波形在最後一個完整月的斜率，並非股市未來方向。更換1990、1995、2000起點可檢查判讀是否翻轉。</p>
+      <div id="cycleHypotheses"></div><p>樣本內R²包含時間趨勢的解釋力，不能用來證明康波存在。未涵蓋一圈長波，無法可靠定位春夏秋冬。</p>
+    </details>
+    <details><summary>逐步向前驗證：週期是否勝過簡單基準？</summary>
+      <p>先用180個已完成月訓練，向前預測12／36個月；每次只使用當時已知資料，測試起點按預測長度前進，不重疊。指標是平均絕對對數誤差×100，越小越好；並非勝率、策略報酬或標準百分比誤差。這只是固定週期假說的診斷，不能補足長波數量不足的限制。</p><div id="cycleBacktest"></div>
+    </details>
+    <details><summary>歷史分段報酬、回撤與持有期風險</summary>
+      <div id="cycleHistory"></div><p>分段漲跌由前一年度最後收盤至該段末日計算；1990從資料首日開始。分段回撤只比較區段內高點，與全樣本回撤不同。</p>
+      <div id="cycleWindows"></div><p>以上是所有歷史月末起算的重疊持有窗，P10／P90是歷史分位數；不等於未來80%信賴區間，也不是可實現的獲利承諾。</p>
+    </details>
+    <details><summary>資料、限制與研究依據</summary><p id="cycleSources"></p><ul id="cycleLimitations"></ul>
+      <p>康波研究關注技術、投資、信貸與物價的數十年變動；不能直接等同單一股價指數的固定循環。本版完成台股價格層面的假說診斷；總體因果尚未驗證，不將AI等題材直接指定為第六波的起點。</p>
+      <p><a href="https://www.twse.com.tw/zh/trading/historical/fmtqik.html" target="_blank" rel="noopener">證交所：每日市場成交資訊（1990起） ↗</a> · <a href="https://finance.yahoo.com/quote/%5ETWII/history/" target="_blank" rel="noopener">Yahoo Finance：TAIEX行情 ↗</a> · <a href="https://doi.org/10.1080/09538259.2023.2280803" target="_blank" rel="noopener">Hecht：長波實證重新檢驗 ↗</a> · <a href="https://arxiv.org/abs/2410.05285" target="_blank" rel="noopener">Modis：長波與量化可信度限制 ↗</a></p>
+      <p>文獻對長波存在及其穩定性並無一致結論；即使某些長期總體序列呈現約50年週期，也不等於台股可據此預測轉折。</p>
+    </details>
+  </section>
   <div class="toolbar">
     <label class="search"><span>搜尋上市／上櫃／興櫃股票與 ETF</span><input id="search" inputmode="search" placeholder="輸入代號或名稱，例如 4768、00981A" autocomplete="off" autocapitalize="characters"></label>
     <label>法人統計期間<select id="period"><option value="5">最近5日</option><option value="10">最近10日</option><option value="20" selected>最近20日</option></select></label>
@@ -123,21 +148,6 @@
       </article>
     </div>
 
-    <div class="sectiontitle blocktitle"><div class="eyebrow">公開操作理念轉譯</div><h2>華冠投顧・何丞唐方法模型</h2></div>
-    <article class="panel advisorpanel">
-      <div class="panelhead"><div><h3>籌碼、趨勢、第一手買點與八分飽紀律</h3><p>依公開操作理念，套用本站客觀數據產生；不是何丞唐顧問本人即時建議。</p></div><div id="advisorRatio"></div></div>
-      <div id="advisorFactors" class="advisorfactors"></div>
-      <div class="advisornote"><span>方法依據</span><p>深入研究產業、洞悉法人成本、精算籌碼、切入買點，以及八分飽分批落袋。</p><a href="https://www.hwa-guan.com.tw/Wealth/team/Teacher?T_id=17" target="_blank" rel="noopener">查看華冠投顧官方介紹 ↗</a></div>
-    </article>
-
-    <div class="sectiontitle blocktitle modelneighbor"><div class="eyebrow">錄影策略量化</div><h2>郭哲榮投資長公開方法模型</h2></div>
-    <article class="panel guopanel">
-      <div class="panelhead"><div><h3>籌碼 × 相對位階 × 基本面 × 市場心理</h3><p>依公開操作理念與你提供的錄影，將可取得的客觀資料轉成四面檢查。</p></div><div id="guoRatio"></div></div>
-      <div id="guoFactors" class="advisorfactors"></div>
-      <div class="advisornote"><span>模型重點</span><p>低基期與成長並重，檢查 EPS、估值是否預支未來、法人籌碼及趨勢是否互相確認。</p><a href="https://www.morerich.com.tw/teacher-profile-GuoZherong.html" target="_blank" rel="noopener">查看公開介紹 ↗</a></div>
-      <p class="modeldisclaimer">此區為本站依公開操作觀念建立的規則模型，不代表郭哲榮投資長本人即時意見、授權、喊單或個股推薦。</p>
-    </article>
-
     <div class="sectiontitle blocktitle modelneighbor"><div class="eyebrow">公開投資觀念量化</div><h2>世界投資大師原則模型</h2></div>
     <article class="panel masterpanel">
       <div class="panelhead"><div><h3>價值、趨勢、成長、心理與研究紀律</h3><p>將五位投資家的公開理念轉成可檢查條件，再結合個股產業資料。</p></div><div id="mastersRatio"></div></div>
@@ -234,10 +244,11 @@
   資料取自臺灣證券交易所、證券櫃檯買賣中心公開盤後資料及公開市場／新聞摘要。所有比例均為固定公式評分，不代表上漲機率或獲利保證，僅供研究參考，不構成投資建議。<br>
   <a href="https://www.twse.com.tw/zh/trading/foreign/t86.html">上市三大法人</a> · <a href="https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html">上櫃三大法人</a> · <a href="https://www.twse.com.tw/zh/trading/historical/bwibbu-day.html">本益比</a> · <a href="https://openapi.twse.com.tw/">財報 EPS</a> · <a href="https://www.taifex.com.tw/cht/4/aHIntroduction">臺股期貨夜盤</a>
 </footer>
-<script src="risk-engine.js?v=2.6.3" defer></script>
-<script src="market-signals.js?v=2.6.3" defer></script>
-<script src="intraday-ui.js?v=2.6.3" defer></script>
-<script src="app.js?v=2.6.3" defer></script>
+<script src="risk-engine.js?v=2.7.0" defer></script>
+<script src="market-signals.js?v=2.7.0" defer></script>
+<script src="intraday-ui.js?v=2.7.0" defer></script>
+<script src="long-cycle.js?v=2.7.0" defer></script>
+<script src="app.js?v=2.7.0" defer></script>
 </body>
 </html>
 

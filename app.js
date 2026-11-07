@@ -1,6 +1,6 @@
-/* TWSE + TPEx Flow v2.6.0 — mobile pointer drag sorting for watchlists. */
+/* TWSE + TPEx Flow v2.7.0 — long-term market research and stock diagnostics. */
 const $ = id => document.getElementById(id);
-const APP_VERSION = '2.6.3';
+const APP_VERSION = '2.7.0';
 let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0, institutionDate = null;
 let watchPagesData = [], editingPages = [], watchDrag = null;
 let selectedRisk = null;
@@ -154,33 +154,6 @@ function renderAdvice(a){
   $('tradeValue').textContent='買 '+fmt(a.buyLow)+'～'+fmt(a.buyHigh)+' · 停損 '+fmt(a.stop)+' · 賣 '+fmt(a.sellLow)+'～'+fmt(a.sellHigh);
 }
 
-function advisorModel(a,flowRows){
-  if(!a)return null;
-  let points=0;const factors=[];
-  const flow5=sumNet(flowRows.slice(-5)),flow20=sumNet(flowRows.slice(-20));
-  if(flow5>0&&flow20>0){points+=24;factors.push(['法人籌碼','近5日與20日外資同步買超','bull']);}
-  else if(flow5<0&&flow20<0){points-=24;factors.push(['法人籌碼','近5日與20日外資同步賣超','bear']);}
-  else{factors.push(['法人籌碼','短中期外資方向不一致','neutral']);}
-  if(a.quote.close>a.ind.ma20&&a.ind.ma5>a.ind.ma10){points+=20;factors.push(['趨勢位置','收盤站上月線，短均線偏強','bull']);}
-  else if(a.quote.close<a.ind.ma20&&a.ind.ma5<a.ind.ma10){points-=20;factors.push(['趨勢位置','收盤跌破月線，短均線偏弱','bear']);}
-  else{factors.push(['趨勢位置','均線尚未形成明確排列','neutral']);}
-  const inBuy=a.quote.close>=a.buyLow*.98&&a.quote.close<=a.buyHigh*1.02;
-  if(inBuy&&a.ind.k>a.ind.d&&a.ind.k<80){points+=22;factors.push(['第一手買點','進入買進觀察區且KD偏多','bull']);}
-  else if(a.ind.k>80||a.quote.close>=a.sellLow){points-=18;factors.push(['第一手買點','位置偏高，避免追價','bear']);}
-  else{factors.push(['第一手買點','等待價位與KD訊號靠攏','neutral']);}
-  if(a.quote.close>=a.sellLow){points-=18;factors.push(['八分飽原則','已接近分批賣出區，宜鎖定成果','bear']);}
-  else if(a.quote.close<a.stop){points-=30;factors.push(['風險紀律','已跌破停損參考','bear']);}
-  else{points+=6;factors.push(['風險紀律','尚未觸及停損或賣出區','neutral']);}
-  const buy=Math.round(Math.max(5,Math.min(95,50+points/2)));
-  return {buy,sell:100-buy,factors};
-}
-function renderAdvisor(a,flowRows){
-  const view=advisorModel(a,flowRows);
-  if(!view){$('advisorRatio').innerHTML=ratioBadge({buy:50,sell:50});$('advisorFactors').innerHTML='<div class="advisor-empty">歷史資料滿20個交易日後產生。</div>';return;}
-  $('advisorRatio').innerHTML=ratioBadge(view);
-  $('advisorFactors').innerHTML=view.factors.map(([name,text,state])=>'<div class="advisorfactor '+state+'"><span>'+escape(name)+'</span><strong>'+escape(text)+'</strong></div>').join('');
-}
-
 function fundamentalAnalysis(code,price,pe,industry){
   const report=market.financials?.[code]||{},epsReported=JCRisk.num(report.eps),epsTtm=price>0&&pe>0?price/pe:null;
   const peers=Object.entries(market.company_profiles||{}).filter(([peer,p])=>peer!==code&&p.industry===industry.industry).map(([peer])=>Number(latestMarket()[peer]?.pe)).filter(x=>x>0&&x<200);
@@ -277,33 +250,6 @@ function renderHoldingDecision(code,a,flowRows){
   $('holdingFactors').innerHTML=view.factors.map(([name,text,state])=>'<div class="advisorfactor '+state+'"><span>'+escape(name)+'</span><strong>'+escape(text)+'</strong></div>').join('');
   $('holdingConclusion').className='holdingconclusion '+view.state;
   $('holdingConclusion').innerHTML='<div><span>系統判讀</span><strong>'+escape(view.action)+'</strong></div><p>'+escape(view.summary)+'</p><small>'+(Number.isFinite(view.holdingRatio)?'外資持股資料日 '+escape(view.holdingDate||'最近更新'):'本次無實際持股比率')+'</small>';
-}
-
-function guoModel(a,flowRows,industry,fundamental){
-  if(!a)return null;
-  let points=0;const factors=[],flow5=sumNet(flowRows.slice(-5)),flow20=sumNet(flowRows.slice(-20));
-  if(flow5>0&&flow20>0){points+=23;factors.push(['籌碼與相對點位','外資短中期同步買超','bull']);}
-  else if(flow5<0&&flow20<0){points-=23;factors.push(['籌碼與相對點位','外資短中期同步賣超','bear']);}
-  else factors.push(['籌碼與相對點位','法人方向尚未一致','neutral']);
-  const rows=prices(selected),high60=rows.length?Math.max(...rows.slice(-60).map(x=>x.high)):null,fromHigh=high60>0?(a.quote.close/high60-1)*100:null;
-  if(a.quote.close>a.ind.ma20&&a.macd?.currentHist>0){points+=20;factors.push(['技術線與循環','站上月線且 MACD 多方','bull']);}
-  else if(a.quote.close<a.ind.ma20&&a.macd?.currentHist<0){points-=20;factors.push(['技術線與循環','跌破月線且 MACD 空方','bear']);}
-  else factors.push(['技術線與循環','趨勢訊號互有矛盾','neutral']);
-  if(fundamental.epsTtm>0&&fundamental.peerPe>0&&fundamental.pe<=fundamental.peerPe){points+=24;factors.push(['EPS 與估值','EPS 為正且本益比不高於同業','bull']);}
-  else if(!(fundamental.epsTtm>0)||fundamental.pe>fundamental.peerPe*1.2){points-=24;factors.push(['EPS 與估值','獲利不足或估值已明顯偏高','bear']);}
-  else factors.push(['EPS 與估值','獲利為正，估值接近同業','neutral']);
-  const lowBase=Number.isFinite(fromHigh)&&fromHigh<=-12;
-  if(lowBase&&industry.buy>=55){points+=18;factors.push(['低基期高成長','距60日高點逾12%，產業仍偏強','bull']);}
-  else if(Number.isFinite(fromHigh)&&fromHigh>-3&&a.ind.k>80){points-=16;factors.push(['市場心理與追價','接近波段高點且 KD 過熱','bear']);}
-  else factors.push(['市場心理與追價','未出現明顯低基期或過熱條件','neutral']);
-  const view=ratio(points/2);
-  return {...view,factors};
-}
-function renderGuo(a,flowRows,industry,fundamental){
-  const view=guoModel(a,flowRows,industry,fundamental);
-  if(!view){$('guoRatio').innerHTML=ratioBadge({buy:50,sell:50});$('guoFactors').innerHTML='<div class="advisor-empty">歷史資料滿20個交易日後產生。</div>';return;}
-  $('guoRatio').innerHTML=ratioBadge(view);
-  $('guoFactors').innerHTML=view.factors.map(([name,text,state])=>'<div class="advisorfactor '+state+'"><span>'+escape(name)+'</span><strong>'+escape(text)+'</strong></div>').join('');
 }
 
 function industryAnalysis(code){
@@ -628,12 +574,12 @@ function render(){
   $('details').innerHTML=[['外資及陸資',f],['投信',stock.trust],['自營商',stock.dealer]].map(([name,x])=>'<tr><td>'+name+'</td><td>'+lots(x.buy).replace('+','')+'</td><td>'+lots(x.sell).replace('+','')+'</td><td class="'+color(x.net)+'">'+lots(x.net)+'</td></tr>').join('');
   const total=f.buy+f.sell,ratio=Number.isFinite(total)&&total>0?f.buy/total:null;$('gaugeFill').style.width=ratio===null?'0%':(ratio*100).toFixed(1)+'%';$('gaugeText').innerHTML=ratio===null?'買賣分項不足':'<span>買進 '+fmt(ratio*100)+'%</span><span>賣出 '+fmt((1-ratio)*100)+'%</span>';
   $('kd').textContent=a?'K '+fmt(a.ind.k,1)+' / D '+fmt(a.ind.d,1):'—';$('boll').textContent=a?fmt(a.ind.lower)+' / '+fmt(a.ind.middle)+' / '+fmt(a.ind.upper):'—';$('ma').textContent=a?'MA5 '+fmt(a.ind.ma5)+' · MA10 '+fmt(a.ind.ma10)+' · MA20 '+fmt(a.ind.ma20):'—';
-  flowChart(periodRows);technicalChart(priceRows,a);renderMacd(priceRows,a?.macd);renderPlan(a);renderAdvice(a);renderHoldingDecision(selected,a,availableFlows);renderAdvisor(a,availableFlows);const industry=renderIndustry(selected);const fundamental=renderFundamentals(selected,price,Number(pe),industry);renderGuo(a,availableFlows,industry,fundamental);renderNight();renderMasters(a,availableFlows,industry);renderGlobal();renderWatchlist();rank();
+  flowChart(periodRows);technicalChart(priceRows,a);renderMacd(priceRows,a?.macd);renderPlan(a);renderAdvice(a);renderHoldingDecision(selected,a,availableFlows);const industry=renderIndustry(selected);const fundamental=renderFundamentals(selected,price,Number(pe),industry);renderNight();renderMasters(a,availableFlows,industry);renderGlobal();renderWatchlist();rank();
 }
 
 async function load(){
   $('status').textContent='正在載入證交所盤後資料…';
-  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;const closeDate=market.latest_quotes?.date>=market.latest_session?market.latest_quotes.date:market.latest_session;$('stamp').textContent='法人 '+market.latest_session+' · 收盤 '+closeDate+' · v'+APP_VERSION;const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!securityUniverse()[selected])selected=first||Object.keys(latestMarket())[0];render();}
+  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();window.JCLong?.use(market.long_term);if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;const closeDate=market.latest_quotes?.date>=market.latest_session?market.latest_quotes.date:market.latest_session;$('stamp').textContent='法人 '+market.latest_session+' · 收盤 '+closeDate+' · v'+APP_VERSION;const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!securityUniverse()[selected])selected=first||Object.keys(latestMarket())[0];render();}
   catch(e){if($('stamp'))$('stamp').textContent='尚未取得資料';if($('content'))$('content').hidden=true;if($('status'))$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
 }
 

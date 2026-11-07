@@ -48,3 +48,4 @@ def fetch_calendar(target, previous=None):
         # A partial refresh must not be promoted as a complete calendar.
         return sorted(set((previous or {}).get('trading_sessions', [])) | dates), None
     return sorted(dates), dt.datetime.now(dt.timezone.utc).isoformat()
+

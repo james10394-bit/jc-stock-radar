@@ -79,7 +79,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if path not in ('/', '/index.html', '/app.js', '/risk-engine.js', '/market-signals.js', '/intraday-ui.js', '/style.css', '/data/market.json', '/data/intraday.json', '/data/watchlist.json'):
+        if path not in ('/', '/index.html', '/app.js', '/risk-engine.js', '/market-signals.js', '/intraday-ui.js', '/long-cycle.js', '/data/longterm.json', '/style.css', '/data/market.json', '/data/intraday.json', '/data/watchlist.json'):
             self.send_error(404)
             return
         super().do_GET()
