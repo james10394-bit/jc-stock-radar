@@ -583,8 +583,20 @@ async function load(){
   catch(e){if($('stamp'))$('stamp').textContent='尚未取得資料';if($('content'))$('content').hidden=true;if($('status'))$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
 }
 
-$('search').addEventListener('change',e=>{const term=e.target.value.trim().toUpperCase();if(!term)return;const hit=findSecurity(term);if(hit){selected=hit[0];render();}else{$('content').hidden=true;$('status').textContent='證券名單中找不到「'+term+'」，請確認代號或更新資料。';}});
-$('search').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();});$('period').addEventListener('change',render);$('refresh').addEventListener('click',load);
+$('stockSearchForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  const input=$('search'),term=input.value.trim().toUpperCase();
+  if(!term){input.focus();return;}
+  if(!market){$('status').textContent='行情資料載入中，請稍後再查詢。';return;}
+  const hit=findSecurity(term);
+  if(!hit){$('content').hidden=true;$('status').textContent='證券名單中找不到「'+term+'」，請確認代號或更新資料。';return;}
+  selected=hit[0];
+  input.value=selected;
+  input.blur();
+  render();
+  $('title').scrollIntoView({block:'nearest'});
+});
+$('period').addEventListener('change',render);$('refresh').addEventListener('click',load);
 $('institutionDate').addEventListener('change',e=>{institutionDate=e.target.value;render();});
 $('watchlist').addEventListener('click',e=>{const b=e.target.closest('[data-watch]');if(b&&securityUniverse()[b.dataset.watch]){selected=b.dataset.watch;render();}});
 $('watchPages').addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b){activeWatchPage=Number(b.dataset.page);renderWatchlist();}});
@@ -649,5 +661,3 @@ window.JCApp={getMarket:()=>market,getSelected:()=>selected,select:code=>{if(sec
 load();
 setInterval(()=>{if(!$('watchEditor').open)load();},5*60*1000);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!$('watchEditor').open)load();});
-
-
