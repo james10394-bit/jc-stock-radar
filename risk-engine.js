@@ -77,6 +77,78 @@
     }
     return {eligible:blocks.length===0,blocks:[...new Set(blocks)],notes,score,price:p,priceDate:end?.date,eps:f.eps,period:f.period,stop,target,riskPct,rr,technical:t,missing:cov.missing,missingFlows:cov.missingFlows};
   }
+  function candleVolume(rows){
+    const r=last(rows),prior=rows.slice(-21,-1),vol=prior.map(x=>num(x.volume));
+    const [o,h,l,c,v]=['open','high','low','close','volume'].map(k=>num(r?.[k]));
+    if(prior.length<20||vol.some(x=>x===null||x<0)||!(mean(vol)>0)||!(o>0&&c>0&&l>0&&h>=Math.max(o,c)&&l<=Math.min(o,c)&&v>0))return null;
+    const range=h-l,upper=range>0?(h-Math.max(o,c))/range:0;
+    const strength=range>0?(c-l)/range:.5,ratio=v/mean(vol),prev=num(last(prior).close);
+    const top=Math.max(...prior.map(x=>num(x.high)));
+    const rejection=ratio>=1.5&&upper>=.45&&strength<=.5;
+    const reversal=ratio>=1.5&&h>top&&c<o&&c<prev&&(o-c)/range>=.45;
+    const distribution=ratio>=1.5&&c<o&&c<prev&&strength<=.35;
+    const breakout=ratio>=1.5&&c>top&&c>o&&strength>=.7;
+    return {upper,ratio,rejection,reversal,distribution,breakout,volume:v};
+  }
+  function assessEntry(m,code,options={}){
+    const cutoff=options.cutoff||m.latest_session,base=assess(m,code,options),cov=coverage(m,code,cutoff);
+    const profile=m.company_profiles?.[code]||m.security_registry?.[code]||{},f=financial(m,code);
+    const data=[],blocks=[],factors=[],notes=[...base.notes];
+    const add=(name,weight,share,detail)=>factors.push({name,weight,points:share===null?null:Math.round(share*weight),detail});
+    const n=x=>Number(x).toFixed(2),signed=x=>x===null?'缺資料':(x>0?'+':'')+n(x),lots=x=>x===null?'缺資料':new Intl.NumberFormat('zh-TW',{maximumFractionDigits:2}).format(x/1000)+' 張';
+    const history=Object.fromEntries(cov.rows.map(r=>[r.date,r]));
+    const rows=cov.sessions.slice(-60).map(d=>history[d]).filter(r=>r&&['open','high','low','close'].every(k=>num(r[k])>0)&&r.high>=Math.max(r.open,r.close)&&r.low<=Math.min(r.open,r.close));
+    const t=technical(rows),r=last(rows),p=num(r?.close),cv=candleVolume(rows);
+    if(!['上市','上櫃'].includes(profile.market)||!/^[1-9]\d{3}$/.test(code))data.push('此綜合評估適用上市／上櫃四碼普通股');
+    if(!cov.verified||r?.date!==cutoff||rows.slice(-30).map(x=>x.date).join()!==cov.sessions.slice(-30).join())data.push('行情、交易日曆或近5日外資淨額未完整同步');
+    if(m.latest_quotes?.date>cutoff&&num(m.latest_quotes.quotes?.[code]?.close)>0)data.push('已有較新的收盤價，等待同日法人與完整日線同步');
+    if(cutoff!==m.latest_session)data.push('歷史日期只顯示交易資料；財報快照無法驗證當時是否已公布');
+    const age=(Date.parse(cutoff)-Date.parse(f.periodEnd))/86400000;
+    const validEPS=f.eps!==null&&age>=0&&age<=190;
+    if(!validEPS)data.push('EPS 或財報期別不足、過期或日期不符');
+    if(!t||!(p>0)||!cv)data.push('KD、布林通道或價量所需的日線資料不足');
+    const frows=cov.sessions.slice(-5).map(d=>m.days?.[d]?.[code]?.foreign);
+    const day=last(frows),net=num(day?.net),validFlow=frows.length===5&&frows.every(x=>num(x?.net)!==null);
+    const sum=validFlow?frows.reduce((s,x)=>s+num(x.net),0):null;
+    let streak=0;for(const row of [...frows].reverse()){if(!(num(row?.net)>0))break;streak++;}
+    const o=m.company_outlook?.[code],y=num(o?.yoy),ytd=num(o?.ytd),oAge=(Date.parse(cutoff)-Date.parse(o?.published))/86400000;
+    const outlook=oAge>=0&&oAge<=120&&/^\d{4}-\d{2}$/.test(o?.period||'')&&o.period<cutoff.slice(0,7)&&y!==null&&ytd!==null;
+    add('KD 動能',15,t?(t.k>=85?.35:t.k>t.d?(t.k>=35?.95:.65):t.k===t.d?.5:.15):null,t?'K '+n(t.k)+'｜D '+n(t.d)+(t.k>=85?'｜過熱':''):'資料不足');
+    add('EPS 獲利',15,validEPS?(f.eps>0?1:f.eps===0?.25:0):null,validEPS?f.period+' 累計 EPS '+n(f.eps)+' 元':'資料不足');
+    add('公司營收動能',15,outlook?(y>0&&ytd>0?1:y<0&&ytd<0?0:.5):null,outlook?o.period+' 月年增 '+signed(y)+'%｜累計年增 '+signed(ytd)+'%（歷史營收，非財測）':'缺少可用月營收，不計分；無法推論公司前景');
+    if(t){
+      const mid=t.ma20,sd=Math.sqrt(mean(rows.slice(-20).map(x=>(x.close-mid)**2))),upper=mid+2*sd,lower=mid-2*sd;
+      add('布林通道',15,sd===0?.5:p>upper?.5:p>=mid?.95:p>=lower?.3:0,'下軌 '+n(lower)+'｜中軌 '+n(mid)+'｜上軌 '+n(upper)+(p>upper?'｜超出上軌，留意追價':''));
+      const old20=mean(rows.slice(-25,-5).map(x=>num(x.close)));
+      const signals=[p>=t.ma20,t.ma5>=t.ma10,t.ma10>=t.ma20,t.ma20>old20];
+      add('多頭趨勢',15,signals.filter(Boolean).length/4,'MA5 '+n(t.ma5)+'｜MA10 '+n(t.ma10)+'｜MA20 '+n(t.ma20)+'｜20日線較5個交易日前'+(t.ma20>old20?'上揚':t.ma20===old20?'持平':'下滑'));
+    }else{
+      add('布林通道',15,null,'資料不足');add('多頭趨勢',15,null,'資料不足');
+    }
+    add('外資買賣',15,validFlow?(net>0&&sum>0?(streak>=3?.75:1):net<0&&sum<0?0:.5):null,'當日買 '+lots(num(day?.buy))+'｜賣 '+lots(num(day?.sell))+'｜淨額 '+lots(net)+'｜5日淨額 '+lots(sum)+(streak>=3?'｜連買 '+streak+' 日，留意籌碼擁擠':''));
+    const alert=cv&&(cv.rejection||cv.reversal||cv.distribution);
+    const candleLabel=!cv?'資料不足':cv.reversal?'放量一日反轉':cv.rejection?'帶量長上影':cv.distribution?'放量收黑':cv.breakout?'放量突破':cv.upper>=.45?'長上影、未達放量門檻':'未出現明顯價量訊號';
+    add('價量與上影線',10,cv?(alert?0:cv.breakout?1:cv.upper>=.45?.25:.5):null,cv?candleLabel+'｜成交 '+lots(cv.volume)+'｜前20日均量 '+n(cv.ratio)+' 倍｜上影佔振幅 '+n(cv.upper*100)+'%':candleLabel);
+    if(!outlook)notes.push('營收資料缺失或過期：營收項不計分，其他項目維持原權重。');
+    const severe=base.blocks.filter(x=>/重大事件|已跌破|當日跌幅/.test(x));
+    if(alert)severe.push(candleLabel+'：先觀察下一交易日是否重新站穩，暫緩新買進');
+    // Confirm a swing low with two completed bars on either side; never invent a target above the prior high.
+    const recent=rows.slice(-21,-1);
+    const pivots=recent.filter((x,i)=>i>=2&&i<recent.length-2&&[-2,-1,1,2].every(k=>x.low<recent[i+k].low));
+    const pivot=last(pivots);
+    const stop=pivot?pivot.low*.995:base.stop;
+    const target=recent.length===20?Math.max(...recent.map(x=>num(x.high)))*.995:null;
+    const riskPct=stop>0&&p>0?(p-stop)/p*100:null,rr=target>0&&p>stop&&stop>0?(target-p)/(p-stop):null;
+    blocks.push(...base.blocks.filter(x=>/EPS 非正值|過熱|暫停追價/.test(x)));
+    if(pivot&&p<=stop)blocks.push('收盤已跌破近期確認低點的結構停損');
+    if(!(riskPct>=.5-1e-9&&riskPct<=8))blocks.push('停損距離不在0.5%～8%檢核範圍');
+    if(!(rr>=2))blocks.push('至前20日高點的潛在報酬／風險不足2倍');
+    if(pivot)notes.push('結構停損參考近期已確認的低點（'+pivot.date+'）；前高取前20日，不把當日高點當作目標。');
+    const score=data.length?null:factors.reduce((s,x)=>s+(x.points??0),0);
+    const eligible=score!==null&&score>=70&&!severe.length&&!blocks.length;
+    const label=data.length?'資料不足・暫停評分':severe.length?'風險警戒・暫緩新買進':eligible?'條件偏多・可評估新進':score>=70?'偏多觀察・等待合適價位':score>=55?'中性觀察・等待確認':'條件偏弱・暫緩新買進';
+    return {...base,cutoff,eligible,score,label,stop,target,riskPct,rr,factors,blocks:[...data,...severe,...blocks],notes,candle:cv};
+  }
   function position(record,quote){
     const cost=num(record?.cost),shares=num(record?.shares),stop=num(record?.stop),price=num(quote?.price);
     if(!(cost>0&&shares>0&&stop>0&&stop<cost))return null;
@@ -116,6 +188,6 @@
     const chosen=[],used=new Set();for(const r of results){if(used.has(r.industry))continue;used.add(r.industry);r.sectorSample=sectors[r.industry].length;r.sectorMean=mean(sectors[r.industry]);chosen.push(r);if(chosen.length===3)break;}
     return {candidates:chosen,examined,exclusions,reason:chosen.length?'符合條件 '+chosen.length+' 檔；每個產業最多1檔':'目前沒有同時通過量能、財報、趨勢及風險報酬檢核的股票'};
   }
-  const api={num,technical,coverage,financial,assess,position,scan};root.JCRisk=api;if(typeof module!=='undefined')module.exports=api;
+  const api={num,technical,coverage,financial,assess,assessEntry,candleVolume,position,scan};root.JCRisk=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
 

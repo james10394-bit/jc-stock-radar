@@ -69,7 +69,12 @@
     if(!v)return;
     const node=$('riskGuard');
     node.className='risk-guard '+(v.eligible?'guard-pass':'guard-stop');
-    node.innerHTML='<h3>'+(v.eligible?'通過保守型新買進檢核，仍需盤中確認':'暫不列入新買進')+'</h3><p>統一檢查資料完整性、獲利、位置、停損距離及報酬／風險；以下多空分數不是上漲機率。</p><ul>'+v.blocks.concat(v.notes).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>'+(v.stop&&v.price?'<p>依目前結構估算：停損距離 '+fmt(v.riskPct)+'%｜至前高報酬／風險 '+fmt(v.rr)+' 倍。實際持倉停損以你儲存的紀錄為準。</p>':'');
+    const factors=(v.factors||[]).map(f=>'<li><strong>'+esc(f.name)+'｜'+(f.points===null?'不計分':esc(f.points)+' / '+esc(f.weight))+'</strong><br>'+esc(f.detail)+'</li>').join('');
+    node.innerHTML='<h3>'+esc(v.label||'資料不足')+'</h3><p>交易資料日 '+esc(v.cutoff)+'｜'+(v.score===null?'尚無綜合分數':'綜合分數 '+esc(v.score)+' / 100（非上漲機率）')+'</p>'
+      +(v.blocks.length?'<h4>待確認的條件</h4><ul>'+v.blocks.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'')
+      +(factors?'<details open><summary>查看各項指標與計算結果</summary><ul>'+factors+'</ul></details>':'')
+      +(v.notes.length?'<ul>'+v.notes.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'')
+      +(v.stop&&v.price?'<p>結構停損距離 '+fmt(v.riskPct)+'%｜至前高報酬／風險 '+fmt(v.rr)+' 倍。已存持倉停損以你的紀錄為準。</p>':'');
   }
   async function poll(){
     if(polling)return;polling=true;

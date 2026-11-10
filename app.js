@@ -1,6 +1,6 @@
 /* TWSE + TPEx Flow v2.7.0 — long-term market research and stock diagnostics. */
 const $ = id => document.getElementById(id);
-const APP_VERSION = '2.7.1';
+const APP_VERSION = '2.7.2';
 let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0, institutionDate = null;
 let watchPagesData = [], editingPages = [], watchDrag = null;
 let selectedRisk = null;
@@ -149,7 +149,7 @@ function renderAdvice(a){
   const r=adviceRatios(a),ids=['kdRatio','macdRatio','bollRatio','maRatio','levelRatio','tradeRatio'];
   if(!r){ids.forEach(id=>$(id).textContent='資料不足');$('overallRatio').textContent='暫停評分';return;}
   [['kdRatio',r.kd],['macdRatio',r.macd],['bollRatio',r.boll],['maRatio',r.ma],['levelRatio',r.levels],['tradeRatio',r.trade]].forEach(([id,v])=>$(id).innerHTML=ratioBadge(v));
-  $('overallRatio').innerHTML=selectedRisk?.eligible?ratioBadge(r.combined):'<span class="pill">未通過買進檢核</span>';
+  $('overallRatio').textContent=selectedRisk?.score==null?'暫停評分':'綜合分數 '+selectedRisk.score+' / 100';
   $('levelValue').textContent='支撐 '+fmt(a.rawSupport)+' · 壓力 '+fmt(a.rawResistance);
   $('tradeValue').textContent='買 '+fmt(a.buyLow)+'～'+fmt(a.buyHigh)+' · 停損 '+fmt(a.stop)+' · 賣 '+fmt(a.sellLow)+'～'+fmt(a.sellHigh);
 }
@@ -489,11 +489,11 @@ function renderMacd(rows,view){
 function renderPlan(a){
   const v=selectedRisk;
   $('tradePlan').className='signal '+(v?.eligible?'bull':'neutral');
-  $('tradePlan').innerHTML='<strong>'+(v?.eligible?'通過新買進條件，待盤中確認':'暫不列入新買進')+'</strong><ul>'+((v?.eligible?v.notes:v?.blocks)||['資料不足']).map(x=>'<li>'+escape(x)+'</li>').join('')+'</ul>';
+  $('tradePlan').innerHTML='<strong>'+escape(v?.label||'資料不足・暫停評分')+'</strong><ul>'+((v?.eligible?v.notes:v?.blocks)||['資料不足']).map(x=>'<li>'+escape(x)+'</li>').join('')+'</ul>';
   $('buyZone').textContent=v?.eligible&&a?fmt(a.buyLow)+'～'+fmt(a.buyHigh)+' 元':'暫不提供';
   $('stopPrice').textContent=v?.stop?fmt(v.stop)+' 元（結構參考）':'—';
   $('sellZone').textContent=v?.target?fmt(v.target)+' 元（前高參考）':'—';
-  $('levelNote').textContent='結構參考不會自動變更已儲存的持倉停損；新買進需同時滿足資料完整、EPS、趨勢、停損距離與報酬／風險。';
+  $('levelNote').textContent='新進需通過綜合分數及風險檢查。畫面上的結構價位為參考，不會變更已儲存的持倉停損。';
 }
 
 function rank(){
@@ -536,7 +536,7 @@ function renderDataFreshness(now=new Date()){
 function render(){
   if(!market)return; const stock=current()[selected],latestStock=latestMarket()[selected]||stock;
   rank();
-  selectedRisk=JCRisk.assess(market,selected,{cutoff:institutionDate||market.latest_session});
+  selectedRisk=JCRisk.assessEntry(market,selected,{cutoff:institutionDate||market.latest_session});
   window.JCView?.onRender(selectedRisk);
   renderDataFreshness();
   $('content').classList.toggle('data-incomplete',!stock);
@@ -593,9 +593,21 @@ function render(){
   flowChart(periodRows);technicalChart(priceRows,a);renderMacd(priceRows,a?.macd);renderPlan(a);renderAdvice(a);renderHoldingDecision(selected,a,availableFlows);const industry=renderIndustry(selected);const fundamental=renderFundamentals(selected,price,Number(pe),industry);renderNight();renderMasters(a,availableFlows,industry);renderGlobal();renderWatchlist();rank();
 }
 
+async function mergeRevenue(){
+  try{
+    const response=await fetch('data/company-outlook.json?v='+APP_VERSION,{signal:AbortSignal.timeout(3000)});
+    if(!response.ok)return;
+    const seed=await response.json(), merged={...market.company_outlook};
+    for(const [code,row] of Object.entries(seed)){
+      const stored=merged[code];
+      if(!stored||row.period>stored.period||(row.period===stored.period&&row.published>stored.published))merged[code]=row;
+    }
+    market.company_outlook=merged;
+  }catch(_){/* daily snapshot data remains available */}
+}
 async function load(){
   $('status').textContent='正在載入證交所盤後資料…';
-  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();window.JCLong?.use(market.long_term);if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;const closeDate=market.latest_quotes?.date>=market.latest_session?market.latest_quotes.date:market.latest_session;$('stamp').textContent='法人 '+market.latest_session+' · 收盤 '+closeDate+' · v'+APP_VERSION;const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!securityUniverse()[selected])selected=first||Object.keys(latestMarket())[0];render();}
+  try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();await mergeRevenue();window.JCLong?.use(market.long_term);if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;const closeDate=market.latest_quotes?.date>=market.latest_session?market.latest_quotes.date:market.latest_session;$('stamp').textContent='法人 '+market.latest_session+' · 收盤 '+closeDate+' · v'+APP_VERSION;const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!securityUniverse()[selected])selected=first||Object.keys(latestMarket())[0];render();}
   catch(e){$('foreignMarketTotals').innerHTML='<tr><td colspan="5">無法讀取資料，請重新讀取。</td></tr>';if($('stamp'))$('stamp').textContent='尚未取得資料';if($('content'))$('content').hidden=true;if($('status'))$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
 }
 

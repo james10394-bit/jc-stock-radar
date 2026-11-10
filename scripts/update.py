@@ -526,6 +526,58 @@ def latest_close_snapshot(listed_rows, otc_rows, histories, day, updated_at):
     return {'date': day, 'updated_at': updated_at, 'quotes': quotes}
 
 
+REVENUE_ENDPOINTS = (
+    ('TWSE', 'https://openapi.twse.com.tw/v1/opendata/t187ap05_L'),
+    ('TPEx', 'https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O'),
+)
+
+
+def revenue_rows(raw, source):
+    if not isinstance(raw, list):
+        raise ValueError('Expected a revenue table')
+    parsed = {}
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        code = str(row.get('公司代號', '')).strip()
+        month = str(row.get('資料年月', '')).strip()
+        pub = str(row.get('出表日期', '')).strip()
+        if not re.fullmatch(r'[1-9]\d{3}', code) or not re.fullmatch(r'\d{5}', month) or not re.fullmatch(r'\d{7}', pub):
+            continue
+        try:
+            period = dt.date(int(month[:3])+1911, int(month[3:]), 1).isoformat()[:7]
+            published = dt.date(int(pub[:3])+1911, int(pub[3:5]), int(pub[5:])).isoformat()
+            yoy = float(str(row['營業收入-去年同月增減(%)']).replace(',', ''))
+            ytd = float(str(row['累計營業收入-前期比較增減(%)']).replace(',', ''))
+            if period >= published[:7] or not (abs(yoy) < float('inf') and abs(ytd) < float('inf')):
+                continue
+        except (ValueError, KeyError):
+            continue
+        parsed[code] = dict(period=period, published=published, yoy=yoy, ytd=ytd, source=source)
+    return parsed
+
+
+def refresh_revenue(previous, checked, today):
+    records = dict(previous or {})
+    attempts = dict(checked or {})
+    for source, url in REVENUE_ENDPOINTS:
+        if attempts.get(source) == today:
+            continue
+        try:
+            fresh = revenue_rows(http_json(url), source)
+            fresh = {code: row for code, row in fresh.items() if row['published'] <= today}
+            if not fresh:
+                raise ValueError('No usable published rows')
+            for code, row in fresh.items():
+                old_row = records.get(code, {})
+                if (row['period'], row['published']) >= (old_row.get('period', ''), old_row.get('published', '')):
+                    records[code] = row
+            attempts[source] = today
+        except Exception as exc:
+            print(f'{source} monthly revenue unavailable: {exc}')
+    return records, attempts
+
+
 def http_json(url, params=None):
     if params:
         url += '?' + urllib.parse.urlencode(params)
@@ -989,6 +1041,9 @@ def main():
         print(f'EPS financial statements unavailable: {exc}')
         financials = old.get('financials', {})
 
+    company_outlook, revenue_checked = refresh_revenue(old.get('company_outlook'), old.get('revenue_checked'), now.date().isoformat())
+    changed = changed or revenue_checked != old.get('revenue_checked', {})
+
     foreign_holdings = dict(old.get('foreign_holdings', {}))
     holding_successes = 0
     holding_day = latest or target.isoformat()
@@ -1228,7 +1283,7 @@ def main():
         print('No trading session available; existing snapshot preserved')
         return
     old.update({
-        'version': '2.7.0',
+        'version': '2.7.2',
         'trading_sessions': calendar_sessions,
         'calendar_verified_at': calendar_verified_at,
         'calendar_month': target.strftime('%Y-%m'),
@@ -1241,6 +1296,8 @@ def main():
         'watchlist_pages': watchlist_pages,
         'company_profiles': profiles,
         'financials': financials,
+        'company_outlook': company_outlook,
+        'revenue_checked': revenue_checked,
         'foreign_holdings': foreign_holdings,
         'foreign_holding_updated_at': foreign_holding_updated_at,
         'night_futures': night_futures,
@@ -1262,5 +1319,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
