@@ -11,29 +11,37 @@
   <style>
     #stockSearchForm { margin-top: 16px; }
     @media (max-width: 900px) { .workspace { grid-template-areas: "analysis" "watch"; } }
+    main > .workspace { grid-template-columns: minmax(0,1fr); grid-template-areas: "analysis" "watch"; }
+    main > .workspace > .watchhub { position: static; }
+    #foreignUpdate { margin-top: 16px; }
+    #foreignUpdate .panelhead { flex-wrap: wrap; gap: 8px; }
   </style>
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE＋TPEx FLOW · v2.7.0 康波與長期市場研究版</small></div></div>
+  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE＋TPEx FLOW · v2.7.1 外資與個股優先版</small></div></div>
   <a href="https://www.twse.com.tw/" target="_blank" rel="noopener">官方資料：臺灣證券交易所 ↗</a>
 </header>
 <main>
+  <section class="panel" id="foreignUpdate" aria-labelledby="foreignUpdateTitle">
+    <div class="panelhead"><h2 id="foreignUpdateTitle">1. 當日外資買進與賣出</h2><button id="refresh" type="button">重新讀取資料</button></div>
+    <p id="dataFreshness" class="hint" role="status" style="line-height:1.8;margin:12px 0">正在確認法人資料更新狀態…</p>
+    <div class="scroll"><table><thead><tr><th scope="col">市場</th><th scope="col">資料日期</th><th scope="col">外資買進</th><th scope="col">外資賣出</th><th scope="col">淨買賣超</th></tr></thead><tbody id="foreignMarketTotals"><tr><td colspan="5">資料載入中…</td></tr></tbody></table></div>
+    <p class="hint">合計已取得的證券資料，單位為張。外資為資料來源提供的外資及陸資欄位。</p>
+    <div class="stamp" id="stamp">讀取資料中…</div>
+  </section>
   <form class="toolbar" id="stockSearchForm">
-    <label class="search"><span>搜尋上市／上櫃／興櫃股票與 ETF</span><input id="search" inputmode="search" placeholder="輸入代號或名稱，例如 4768、00981A" autocomplete="off" autocapitalize="characters"></label>
+    <label class="search"><span>2. 搜尋股票代號</span><input id="search" inputmode="search" placeholder="輸入代號或名稱，例如 4768、00981A" autocomplete="off" autocapitalize="characters"></label>
     <label>法人統計期間<select id="period"><option value="5">最近5日</option><option value="10">最近10日</option><option value="20" selected>最近20日</option></select></label>
     <button type="submit">查詢個股</button>
-    <button id="refresh" type="button">重新讀取</button>
   </form>
-    <div class="stamp" id="stamp">讀取資料中…</div>
-  <p id="dataFreshness" class="hint" role="status" style="line-height:1.8;margin:12px 0">正在確認法人資料更新狀態…</p>
   <div class="workspace">
     <div class="analysiscol">
       <div id="status" role="status"></div>
 
       <section class="grid" id="content" hidden>
     <div class="heading stockheading">
-      <div class="stockidentity"><div class="eyebrow">個股完整診斷</div><h2 id="title">—</h2></div>
+      <div class="stockidentity"><div class="eyebrow">3. 個股與買賣資料</div><h2 id="title">—</h2></div>
       <section class="stockquick" aria-label="個股公司資訊與即時新聞">
         <div class="quickcompany">
           <div class="quicktitle"><span>公司簡介</span><a id="companyWebsite" target="_blank" rel="noopener">官方網站 ↗</a></div>
@@ -48,9 +56,8 @@
       </section>
       <label class="datechooser">法人資料日期<select id="institutionDate" aria-label="選擇法人資料日期"></select><span id="dateBadge" hidden></span></label>
     </div>
-    <section id="riskGuard" class="risk-guard guard-stop"></section>
     <div class="sectiontitle blocktitle"><div class="eyebrow">法人核心數字</div><h2>法人籌碼總覽</h2></div>
-    <section class="position-panel"><h3>我的持倉風險 · <span id="positionCode"></span></h3><div class="position-inputs"><label>買進均價（元）<input id="positionCost" type="number" min="0.01" step="0.01" placeholder="實際成本"></label><label>持有股數（1張＝1000股）<input id="positionShares" type="number" min="1" step="1" placeholder="例如5000"></label><label>固定停損（元）<input id="positionStop" type="number" min="0.01" step="0.01" placeholder="自行設定"></label><button type="button" id="positionSave">儲存持倉</button><button type="button" id="positionClear">清除紀錄</button></div><p id="positionResult" class="position-result"></p><p>本機瀏覽器紀錄；非自動下單。固定停損不會隨每日重算向下移；停損價不保證能成交於該價。</p></section>
+
     <div class="metrics six">
       <article class="card accent"><span>外資當日買賣超</span><strong id="foreignToday">—</strong><div id="foreignSub" class="sub"></div></article>
       <article class="card"><span>外資期間累計</span><strong id="foreignPeriod">—</strong><div id="foreignStreak" class="sub"></div></article>
@@ -60,6 +67,19 @@
       <article class="card"><span>3日法人淨買超占成交量</span><strong id="largeHolder3d">—</strong><div id="largeHolder3dSub" class="sub">三大法人籌碼推估，非集保實際持股</div></article>
     </div>
 
+    <div class="sectiontitle blocktitle"><div class="eyebrow">資金流向</div><h2>三大法人資金動向</h2></div>
+    <div class="columns nomargin">
+      <article class="panel">
+        <div class="panelhead"><div><h3>三大法人買賣明細</h3><p>最新交易日 · 單位：張</p></div></div>
+        <div class="scroll"><table><thead><tr><th>法人</th><th>買進</th><th>賣出</th><th>買賣超</th></tr></thead><tbody id="details"></tbody></table></div>
+        <div class="divider"></div><h3>外資買賣力量</h3><p class="hint">買進占買進與賣出總量比例，不是即時委託簿。</p>
+        <div class="gauge"><div id="gaugeFill"></div></div><div id="gaugeText" class="gaugelegend"></div>
+      </article>
+      <article class="panel"><div class="panelhead"><div><h3>外資淨買賣走勢</h3><p>正數買超，負數賣超</p></div></div><div id="flowChart" class="chart"></div></article>
+    </div>
+
+    <section id="riskGuard" class="risk-guard guard-stop"></section>
+    <section class="position-panel"><h3>我的持倉風險 · <span id="positionCode"></span></h3><div class="position-inputs"><label>買進均價（元）<input id="positionCost" type="number" min="0.01" step="0.01" placeholder="實際成本"></label><label>持有股數（1張＝1000股）<input id="positionShares" type="number" min="1" step="1" placeholder="例如5000"></label><label>固定停損（元）<input id="positionStop" type="number" min="0.01" step="0.01" placeholder="自行設定"></label><button type="button" id="positionSave">儲存持倉</button><button type="button" id="positionClear">清除紀錄</button></div><p id="positionResult" class="position-result"></p><p>本機瀏覽器紀錄；非自動下單。固定停損不會隨每日重算向下移；停損價不保證能成交於該價。</p></section>
     <div class="sectiontitle blocktitle"><div class="eyebrow">基本面 × 同業估值</div><h2>EPS 與公司本益比完整分析</h2></div>
     <article class="panel fundamentalpanel">
       <div class="panelhead"><div><h3>盈餘、估值與合理價帶</h3><p>以官方本益比、最新財報累計 EPS 與同產業公司比較；資料不足時明確標示。</p></div><div id="fundamentalRatio"></div></div>
@@ -99,17 +119,6 @@
       <div id="masterModels" class="mastergrid"></div>
       <p class="masterdisclaimer">此區為本站依公開投資原則建立的簡化模型，不代表巴菲特、索羅斯、彼得・林區、科斯托蘭尼或是川銀藏本人意見、授權或即時建議；缺少現金流、ROE、成長率等資料時會明確提示需另行核對。</p>
     </article>
-
-    <div class="sectiontitle blocktitle"><div class="eyebrow">資金流向</div><h2>三大法人資金動向</h2></div>
-    <div class="columns nomargin">
-      <article class="panel">
-        <div class="panelhead"><div><h3>三大法人買賣明細</h3><p>最新交易日 · 單位：張</p></div></div>
-        <div class="scroll"><table><thead><tr><th>法人</th><th>買進</th><th>賣出</th><th>買賣超</th></tr></thead><tbody id="details"></tbody></table></div>
-        <div class="divider"></div><h3>外資買賣力量</h3><p class="hint">買進占買進與賣出總量比例，不是即時委託簿。</p>
-        <div class="gauge"><div id="gaugeFill"></div></div><div id="gaugeText" class="gaugelegend"></div>
-      </article>
-      <article class="panel"><div class="panelhead"><div><h3>外資淨買賣走勢</h3><p>正數買超，負數賣超</p></div></div><div id="flowChart" class="chart"></div></article>
-    </div>
 
     <div class="sectiontitle blocktitle"><div class="eyebrow">日線技術面</div><h2>技術指標與價格趨勢</h2></div>
     <div class="columns techrow nomargin">
@@ -253,6 +262,6 @@
 <script src="market-signals.js?v=2.7.0" defer></script>
 <script src="intraday-ui.js?v=2.7.0" defer></script>
 <script src="long-cycle.js?v=2.7.0" defer></script>
-<script src="app.js?v=2.7.0-stock-first" defer></script>
+<script src="app.js?v=2.7.1-foreign-stock" defer></script>
 </body>
 </html>

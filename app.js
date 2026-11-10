@@ -1,6 +1,6 @@
 /* TWSE + TPEx Flow v2.7.0 — long-term market research and stock diagnostics. */
 const $ = id => document.getElementById(id);
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '2.7.1';
 let market = null, selected = '2615', rankSide = 'buy', activeWatchPage = 0, institutionDate = null;
 let watchPagesData = [], editingPages = [], watchDrag = null;
 let selectedRisk = null;
@@ -503,10 +503,26 @@ function rank(){
   $('ranking').innerHTML=v.rows.length?v.rows.map((s,i)=>'<tr data-code="'+escape(s.code)+'" tabindex="0" role="button" aria-label="分析 '+escape(s.code+' '+s.name)+'"><td>'+(i+1)+'</td><td><strong>'+escape(s.code)+'</strong><br>'+escape(s.name)+'<small> '+escape(s.market)+'</small></td><td class="'+color(s.today)+'">'+lots(s.today)+'</td><td class="'+color(s.total)+'">'+(s.total===null?'資料不足':lots(s.total))+'</td><td>'+s.streak+'日'+(s.streak>=3?' ⚠️':'')+'</td><td>'+(s.close!==null?fmt(s.close)+' 元':'—')+'</td></tr>').join(''):'<tr><td colspan="6">'+escape(v.error||'目前沒有符合此排序方向的完整資料')+'</td></tr>';
 }
 
+function renderForeignMarketTotals(today){
+  const dateKeys=days().filter(date=>date<=today).reverse();
+  $('foreignMarketTotals').innerHTML=['上市','上櫃'].map(name=>{
+    for(const date of dateKeys){
+      const items=Object.values(market.days[date]).filter(s=>(s.market||'上市')===name);
+      if(!items.length) continue;
+      const valid=items.filter(s=>Number.isFinite(s.foreign?.buy)&&Number.isFinite(s.foreign?.sell));
+      const buy=valid.reduce((a,s)=>a+s.foreign.buy,0),sell=valid.reduce((a,s)=>a+s.foreign.sell,0);
+      const label=date===today?'今日':'最近可用';
+      const coverage=valid.length===items.length?'':'（'+valid.length+'/'+items.length+' 檔）';
+      return '<tr><th scope="row">'+name+'</th><td>'+escape(date)+' · '+label+coverage+'</td><td>'+(valid.length?fmt(buy/1000):'—')+'</td><td>'+(valid.length?fmt(sell/1000):'—')+'</td><td class="'+(valid.length?color(buy-sell):'')+'">'+(valid.length?lots(buy-sell):'—')+'</td></tr>';
+    }
+    return '<tr><th scope="row">'+name+'</th><td colspan="4">尚無可用資料</td></tr>';
+  }).join('');
+}
 function renderDataFreshness(now=new Date()){
   const node=$('dataFreshness');if(!node||!market)return;
   const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now).map(x=>[x.type,x.value]));
   const today=parts.year+'-'+parts.month+'-'+parts.day;
+  renderForeignMarketTotals(today);
   const weekday=new Date(today+'T12:00:00+08:00').getUTCDay();
   const afterClose=Number(parts.hour)*60+Number(parts.minute)>=13*60+35;
   const checked=market.updated_at?new Date(market.updated_at):null;
@@ -580,7 +596,7 @@ function render(){
 async function load(){
   $('status').textContent='正在載入證交所盤後資料…';
   try{const response=await fetch('data/market.json?cache='+Date.now(),{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);market=await response.json();window.JCLong?.use(market.long_term);if(!market.latest_session||!latestMarket())throw new Error('尚未取得交易日資料。');institutionDate=market.latest_session;loadWatchPages();const recent=days().slice(-5).reverse();$('institutionDate').innerHTML=recent.map(date=>'<option value="'+escape(date)+'">'+escape(date)+(date===market.latest_session?'（最新）':'')+'</option>').join('');$('institutionDate').value=institutionDate;const closeDate=market.latest_quotes?.date>=market.latest_session?market.latest_quotes.date:market.latest_session;$('stamp').textContent='法人 '+market.latest_session+' · 收盤 '+closeDate+' · v'+APP_VERSION;const first=watchPagesData.flatMap(x=>x.codes||[]).find(x=>latestMarket()[x]);if(!securityUniverse()[selected])selected=first||Object.keys(latestMarket())[0];render();}
-  catch(e){if($('stamp'))$('stamp').textContent='尚未取得資料';if($('content'))$('content').hidden=true;if($('status'))$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
+  catch(e){$('foreignMarketTotals').innerHTML='<tr><td colspan="5">無法讀取資料，請重新讀取。</td></tr>';if($('stamp'))$('stamp').textContent='尚未取得資料';if($('content'))$('content').hidden=true;if($('status'))$('status').textContent=e.message+' 請先到 GitHub Actions 執行更新資料。';}
 }
 
 $('stockSearchForm').addEventListener('submit',e=>{
