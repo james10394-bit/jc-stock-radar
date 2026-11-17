@@ -1,0 +1,41 @@
+name: Update TAIFEX overnight analysis
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/taifex_night.py'
+      - '.github/workflows/taifex-night.yml'
+  schedule:
+    # 05:35 daily after Taiwan's Mon–Fri night sessions, plus a 07:35 retry.
+    - cron: '35 21,23 * * 1-5'
+    # Monday pre-open retry for Friday's overnight session.
+    - cron: '35 23 * * 0'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stock-snapshot-writes
+  cancel-in-progress: false
+
+jobs:
+  overnight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch official TAIFEX reports
+        run: python3 -u scripts/taifex_night.py
+      - name: Publish latest completed overnight session
+        run: |
+          git add data/taifex-night.json
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'data: update TAIFEX overnight analysis'
+          git pull --rebase
+          git push
