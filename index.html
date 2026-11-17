@@ -19,7 +19,7 @@
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE＋TPEx FLOW · v2.7.2 多因子買進評估版</small></div></div>
+  <div class="brand"><span class="mark">⌁</span><div><strong>台股法人技術分析站</strong><small>TWSE＋TPEx FLOW · v2.7.3 台指期夜盤分析版</small></div></div>
   <a href="https://www.twse.com.tw/" target="_blank" rel="noopener">官方資料：臺灣證券交易所 ↗</a>
 </header>
 <main>
@@ -192,6 +192,24 @@
   <div class="hero">
     <div><div class="eyebrow">集中市場 · 法人籌碼 × 技術指標</div><h1>一頁看懂籌碼、趨勢與關鍵價位。</h1><p>整合外資、投信、自營商買賣超，並以歷史行情計算 KD、布林通道、均線與規則式進出場區間。</p></div>
   </div>
+  <section class="opening-desk" id="taifexNight" aria-labelledby="taifexNightTitle">
+    <h2 id="taifexNightTitle">台指期夜盤與台股早盤分析</h2>
+    <p id="taifexNightStatus" role="status">正在確認期交所夜盤資料…</p>
+    <h3 id="taifexNightScenario"></h3>
+    <div id="taifexNightMetrics" class="signal-cards"></div>
+    <details>
+      <summary>查看四種劇本和計算方式</summary>
+      <div class="scroll"><table><thead><tr><th scope="col">劇本</th><th scope="col">夜盤</th><th scope="col">外資淨額</th><th scope="col">台股早盤觀察</th></tr></thead>
+        <tbody><tr><td>一</td><td>上漲</td><td>≥ +1,000口</td><td>偏向開高，觀察是否續漲</td></tr>
+        <tr><td>二</td><td>上漲</td><td>負值</td><td>偏向開高，留意高開低走</td></tr>
+        <tr><td>三</td><td>下跌</td><td>負值</td><td>偏向開低，留意跌勢延續</td></tr>
+        <tr><td>四</td><td>下跌</td><td>≥ +1,000口</td><td>偏向開低，留意早盤反彈</td></tr></tbody></table></div>
+      <p>量比＝夜盤成交量 ÷（夜盤成交量＋前一交易日日盤一般時段成交量）。成交量用大台 TX 各到期月份小計，價格方向用近月合約的夜盤最後成交價減同合約日盤結算價。</p>
+      <p>量比低於30%為參考價值低，30%至40%為一般，超過40%為強訊號。外資採同一夜盤 TX 多方成交口數減空方成交口數，達 ±1,000 口標示明顯偏多或偏空。負值即符合劇本二或三的外資條件，未達千口時標示小幅偏空。夜盤平盤、外資為零或小幅偏多時不套用四種劇本。</p>
+      <p>劇本為盤前觀察規則，實際開盤可能與夜盤方向不同，規則尚未回測。</p>
+    </details>
+    <p><a href="https://www.taifex.com.tw/cht/3/futDailyMarketReport?commodity_id=TX" target="_blank" rel="noopener">期交所 TX 行情 ↗</a> · <a href="https://www.taifex.com.tw/cht/3/futContractsDateAh" target="_blank" rel="noopener">期交所夜盤外資多空淨額 ↗</a></p>
+  </section>
   <section class="opening-desk long-cycle" id="longCycle" aria-label="1990年至今康波與長期市場研究">
     <div class="eyebrow">長期歷史數據 × 長波假說檢驗</div><h2>1990年至今：康波週期與長期股市研究</h2>
     <p id="cycleStatus" role="status">正在載入長期歷史資料…</p>
@@ -263,5 +281,6 @@
 <script src="intraday-ui.js?v=2.7.2" defer></script>
 <script src="long-cycle.js?v=2.7.0" defer></script>
 <script src="app.js?v=2.7.2" defer></script>
+<script src="taifex-night.js?v=2.7.3" defer></script>
 </body>
 </html>
