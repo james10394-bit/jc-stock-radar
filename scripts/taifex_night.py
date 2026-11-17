@@ -11,7 +11,10 @@ from zoneinfo import ZoneInfo
 TAIPEI = ZoneInfo("Asia/Taipei")
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "data" / "taifex-night.json"
-TAIFEX = "https://www.taifex.com.tw/cht/3/"
+TAIFEX = (
+    "https://www.taifex.com.tw/cht/3/",
+    "https://www.bq888.taifex.com.tw/cht/3/",
+)
 MARKET = "futDailyMarketExcel"
 FOREIGN = "futContractsDateAhExcel"
 DATE = r"(\d{4}/\d{2}/\d{2})"
@@ -90,8 +93,8 @@ def foreign_net(report, target):
 
 
 def build_snapshot(night, day, foreign, now):
-    target = report_date(night, r"日期[：:]\s*" + DATE)
-    day_date = report_date(night, DATE + r"\s+15:00\s*~\s*次日05:00\s+盤後交易時段行情表")
+    target = market_date(night)
+    day_date = night_start(night)
     if target <= day_date or target > day_date + timedelta(days=10):
         raise ValueError("夜盤歸屬日與開盤日不符")
     completed = datetime.combine(day_date + timedelta(days=1), time(5), TAIPEI)
@@ -131,26 +134,58 @@ def build_snapshot(night, day, foreign, now):
     }
 
 
-def fetch(endpoint, **params):
-    url = TAIFEX + endpoint
-    if params:
-        url += "?" + urlencode(params)
-    request = Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html"})
-    with urlopen(request, timeout=30) as response:
-        return Report(response.read().decode("utf-8-sig"))
+def fetch(endpoint, validate, **params):
+    resource = endpoint + ("?" + urlencode(params) if params else "")
+    for base in (*TAIFEX, TAIFEX[0]):
+        request = Request(base + resource, headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html"})
+        try:
+            with urlopen(request, timeout=12) as response:
+                report = Report(response.read().decode("utf-8-sig"))
+            validate(report)
+            return report
+        except (OSError, ValueError, StopIteration) as exc:
+            print(f"期交所報表 {base}{endpoint} 暫不可用：{exc}")
+            last_error = exc
+    raise RuntimeError(f"經重試仍無法取得有效期交所報表：{endpoint}") from last_error
+
+
+def market_date(report):
+    return report_date(report, r"日期[：:]\s*" + DATE)
+
+
+def night_start(report):
+    return report_date(report, DATE + r"\s+15:00\s*~\s*次日05:00\s+盤後交易時段行情表")
 
 
 def main():
     now = datetime.now(timezone.utc).astimezone(TAIPEI)
-    night = fetch(MARKET, marketCode=1, commodity_id="TX")
-    target = report_date(night, r"日期[：:]\s*" + DATE)
     previous = json.loads(OUTPUT.read_text()) if OUTPUT.exists() else None
+
+    def check_night(report):
+        target = market_date(report)
+        if previous and target.isoformat() < previous["targetDate"]:
+            raise ValueError("夜盤報表日期早於已保存的快照")
+        night_start(report)
+        market_rows(report, "*成交量")
+
+    night = fetch(MARKET, check_night, marketCode=1, commodity_id="TX")
+    target = market_date(night)
     if previous and target.isoformat() <= previous["targetDate"]:
-        print(f"已保存 {previous['targetDate']} 夜盤。")
+        print(f"已保存 {previous['targetDate']} 夜盤，期交所尚未提供更新的完整快照。")
         return
-    day_date = report_date(night, DATE + r"\s+15:00")
-    day = fetch(MARKET, marketCode=0, commodity_id="TX", queryDate=day_date.strftime("%Y/%m/%d"))
-    foreign = fetch(FOREIGN)
+    day_date = night_start(night)
+    completed = datetime.combine(day_date + timedelta(days=1), time(5), TAIPEI)
+    if now < completed:
+        print(f"{target} 夜盤尚未收盤，等待下一次排程。")
+        return
+
+    def check_day(report):
+        if market_date(report) != day_date:
+            raise ValueError("一般交易時段報表日期不符")
+        market_rows(report, "*一般交易時段成交量")
+
+    day = fetch(MARKET, check_day, marketCode=0, commodity_id="TX", queryDate=day_date.strftime("%Y/%m/%d"))
+    foreign = fetch(FOREIGN, lambda report: foreign_net(report, target))
     snapshot = build_snapshot(night, day, foreign, now)
     temporary = OUTPUT.with_suffix(".tmp")
     temporary.write_text(json.dumps(snapshot, indent=2) + "\n", encoding="utf-8")
