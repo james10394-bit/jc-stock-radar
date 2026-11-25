@@ -1,12 +1,12 @@
 {
-  "targetDate": "2026-11-24",
-  "dayDate": "2026-11-23",
-  "nightEnd": "2026-11-24T05:00:00+08:00",
+  "targetDate": "2026-11-25",
+  "dayDate": "2026-11-24",
+  "nightEnd": "2026-11-25T05:00:00+08:00",
   "contractMonth": "202612",
-  "dayVolume": 123785,
-  "nightVolume": 94384,
-  "settlement": 36659,
-  "nightClose": 39829,
-  "nightChange": 3170,
-  "foreignNet": 3215
+  "dayVolume": 20609,
+  "nightVolume": 96616,
+  "settlement": 40324,
+  "nightClose": 38482,
+  "nightChange": -1842,
+  "foreignNet": -3892
 }
